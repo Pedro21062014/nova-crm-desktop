@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useClients } from "@/hooks/useFirebaseData";
-import { create, updateItem, removeItem, PATHS, type Client } from "@/services/firebase";
+import { type Client } from "@/services/firebase";
 import { formatDate, cn } from "@/lib/utils";
 
 const emptyClient: Omit<Client, "createdAt" | "updatedAt"> = {
@@ -26,7 +26,7 @@ const emptyClient: Omit<Client, "createdAt" | "updatedAt"> = {
 };
 
 export function ClientsPage() {
-  const { items: clients, loading } = useClients();
+  const { items: clients, loading, addItem, editItem, deleteItem } = useClients();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,9 +65,9 @@ export function ClientsPage() {
     setSaving(true);
     try {
       if (editingId) {
-        await updateItem(PATHS.CLIENTS, editingId, form);
+        await editItem(editingId, form as unknown as Partial<Record<string, unknown>>);
       } else {
-        await create(PATHS.CLIENTS, form as Record<string, unknown>);
+        await addItem(form as Record<string, unknown>);
       }
       setModalOpen(false);
     } catch (err) {
@@ -79,7 +79,7 @@ export function ClientsPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir este cliente?")) {
-      await removeItem(PATHS.CLIENTS, id);
+      await deleteItem(id);
       if (selectedId === id) setSelectedId(null);
     }
   };

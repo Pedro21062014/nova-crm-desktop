@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, Plus, Package, Edit2, Trash2, X } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useProducts } from "@/hooks/useFirebaseData";
-import { create, updateItem, removeItem, PATHS, type Product } from "@/services/firebase";
+import { type Product } from "@/services/firebase";
 import { formatCurrency, cn } from "@/lib/utils";
 
 const containerVariants = {
@@ -27,7 +27,7 @@ const emptyProduct: Omit<Product, "createdAt" | "updatedAt"> = {
 };
 
 export function ProductsPage() {
-  const { items: products, loading } = useProducts();
+  const { items: products, loading, addItem, editItem, deleteItem } = useProducts();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Todos");
   const [modalOpen, setModalOpen] = useState(false);
@@ -67,9 +67,9 @@ export function ProductsPage() {
     setSaving(true);
     try {
       if (editingId) {
-        await updateItem(PATHS.PRODUCTS, editingId, form);
+        await editItem(editingId, form as unknown as Partial<Record<string, unknown>>);
       } else {
-        await create(PATHS.PRODUCTS, form as Record<string, unknown>);
+        await addItem(form as Record<string, unknown>);
       }
       setModalOpen(false);
     } catch (err) {
@@ -81,7 +81,7 @@ export function ProductsPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir este produto?")) {
-      await removeItem(PATHS.PRODUCTS, id);
+      await deleteItem(id);
     }
   };
 

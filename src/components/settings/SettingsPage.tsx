@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Store, Save, Globe, Phone, Mail, Clock, Camera, Globe2, MessageCircle } from "lucide-react";
 import { Card, Button, Input, Skeleton } from "@/components/ui";
 import { useStoreConfig } from "@/hooks/useFirebaseData";
-import { updateItem, create, PATHS, type StoreConfig } from "@/services/firebase";
+import { type StoreConfig } from "@/services/firebase";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -32,7 +32,7 @@ const emptyConfig: StoreConfig = {
 };
 
 export function SettingsPage() {
-  const { items: configItems, loading } = useStoreConfig();
+  const { items: configItems, loading, addItem, editItem } = useStoreConfig();
   const [form, setForm] = useState<StoreConfig>(emptyConfig);
   const [configId, setConfigId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -61,12 +61,9 @@ export function SettingsPage() {
     setSaved(false);
     try {
       if (configId) {
-        await updateItem(PATHS.STORE_CONFIG, configId, form as unknown as Partial<StoreConfig>);
+        await editItem(configId, form as unknown as Partial<Record<string, unknown>>);
       } else {
-        const id = await create(
-          PATHS.STORE_CONFIG,
-          form as unknown as Record<string, unknown>
-        );
+        const id = await addItem(form as unknown as Record<string, unknown>);
         setConfigId(id);
       }
       setSaved(true);

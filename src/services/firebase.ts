@@ -49,13 +49,63 @@ export async function removeItem(path: string, id: string): Promise<void> {
 
 export function subscribe<T>(
   path: string,
-  callback: (data: Record<string, T> | null) => void
+  callback: (data: Record<string, T> | null) => void,
+  onError?: (error: Error) => void
 ): Unsubscribe {
   const dbRef = ref(db, path);
-  const unsubscribe = onValue(dbRef, (snapshot) => {
-    callback(snapshot.val() as Record<string, T> | null);
-  });
-  return () => off(dbRef);
+  const unsubscribe = onValue(
+    dbRef,
+    (snapshot) => {
+      callback(snapshot.val() as Record<string, T> | null);
+    },
+    (error) => {
+      console.error(`[Firebase] Error subscribing to ${path}:`, error);
+      if (onError) onError(error);
+    }
+  );
+  return unsubscribe;
+}
+
+// ── Resolve the correct data path ──
+// Tries user-specific path first, then falls back to root-level path
+
+export function resolvePath(basePath: string, uid?: string | null): string {
+  if (uid) {
+    return `users/${uid}/${basePath}`;
+  }
+  return basePath;
+}
+
+// Try to detect where data lives — user-scoped or root-level
+export async function detectDataPath(
+  basePath: string,
+  uid?: string | null
+): Promise<string> {
+  if (!uid) return basePath;
+
+  // Try user-scoped path first
+  const userPath = `users/${uid}/${basePath}`;
+  try {
+    const userSnapshot = await get(ref(db, userPath));
+    if (userSnapshot.exists()) {
+      return userPath;
+    }
+  } catch {
+    // Permission denied or other error — try root path
+  }
+
+  // Try root-level path
+  try {
+    const rootSnapshot = await get(ref(db, basePath));
+    if (rootSnapshot.exists()) {
+      return basePath;
+    }
+  } catch {
+    // Permission denied or other error
+  }
+
+  // Default to user-scoped path (most common for multi-user apps)
+  return userPath;
 }
 
 // ── Type definitions for Firebase collections ──

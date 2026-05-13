@@ -13,9 +13,6 @@ import {
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
 import {
-  create,
-  updateItem,
-  PATHS,
   type Order,
   type OrderItem,
 } from "@/services/firebase";
@@ -52,7 +49,7 @@ const emptyOrder: Omit<Order, "createdAt" | "updatedAt"> = {
 };
 
 export function OrdersPage() {
-  const { items: orders, loading: ordersLoading } = useOrders();
+  const { items: orders, loading: ordersLoading, addItem: addOrder, editItem: editOrder } = useOrders();
   const { items: clients } = useClients();
   const { items: products } = useProducts();
 
@@ -153,7 +150,7 @@ export function OrdersPage() {
         itens: orderItems,
         total: orderItems.reduce((s, i) => s + i.subtotal, 0),
       };
-      await create(PATHS.ORDERS, orderData as Record<string, unknown>);
+      await addOrder(orderData as Record<string, unknown>);
       setModalOpen(false);
     } catch (err) {
       console.error("Erro ao criar pedido:", err);
@@ -163,7 +160,7 @@ export function OrdersPage() {
   };
 
   const handleStatusChange = async (id: string, status: Order["status"]) => {
-    await updateItem(PATHS.ORDERS, id, { status });
+    await editOrder(id, { status });
   };
 
   return (
