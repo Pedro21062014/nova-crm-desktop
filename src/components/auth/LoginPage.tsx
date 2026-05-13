@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button, Input } from "@/components/ui";
-import { Store, Mail, Lock, AlertCircle } from "lucide-react";
+import { Mail, Lock, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
+import logoSvg from "/logo.svg";
 
 export function LoginPage() {
   const { login, loading: authLoading } = useAuth();
@@ -42,9 +43,11 @@ export function LoginPage() {
       >
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent shadow-md">
-            <Store className="h-7 w-7 text-white" />
-          </div>
+          <img
+            src={logoSvg}
+            alt="Nova CRM"
+            className="h-14 w-14 rounded-2xl shadow-md"
+          />
           <div className="text-center">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               Nova CRM

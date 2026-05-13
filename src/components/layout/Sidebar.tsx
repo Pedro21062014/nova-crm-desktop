@@ -9,8 +9,8 @@ import {
   Settings,
   ChevronLeft,
   LogOut,
-  Store,
 } from "lucide-react";
+import logoSvg from "/logo.svg";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -50,9 +50,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               exit={{ opacity: 0 }}
               className="flex items-center gap-2.5"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent">
-                <Store className="h-4 w-4 text-white" />
-              </div>
+              <img
+                src={logoSvg}
+                alt="Nova CRM"
+                className="h-8 w-8 rounded-lg"
+              />
               <span className="text-base font-semibold text-foreground tracking-tight">
                 Nova CRM
               </span>
@@ -60,9 +62,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )}
         </AnimatePresence>
         {collapsed && (
-          <div className="flex h-8 w-8 mx-auto items-center justify-center rounded-xl bg-accent">
-            <Store className="h-4 w-4 text-white" />
-          </div>
+          <img
+            src={logoSvg}
+            alt="Nova CRM"
+            className="h-8 w-8 mx-auto rounded-lg"
+          />
         )}
       </div>
 
