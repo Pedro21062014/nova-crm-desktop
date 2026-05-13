@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut } = require("electron");
+const { app, BrowserWindow, protocol } = require("electron");
 const path = require("path");
 
 // Disable GPU acceleration for headless environments
@@ -25,6 +25,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      webSecurity: true,
     },
   });
 
@@ -39,12 +40,33 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 
+  // Open DevTools on F12
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (input.key === "F12") {
+      mainWindow.webContents.toggleDevTools();
+    }
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 }
 
+// Register a custom protocol to handle file:// properly for Firebase Auth
+// This ensures Firebase Auth works correctly in the packaged Electron app
 app.whenReady().then(() => {
+  // Allow Firebase Auth to work in Electron by handling the redirect
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: "nova-crm",
+      privileges: {
+        secure: true,
+        standard: true,
+        supportFetchAPI: true,
+      },
+    },
+  ]);
+
   createWindow();
 
   app.on("activate", () => {

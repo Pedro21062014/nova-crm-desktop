@@ -6,8 +6,9 @@ import {
   update,
   remove,
   onValue,
-  off,
   type Unsubscribe,
+  query,
+  limitToFirst,
 } from "firebase/database";
 import { db } from "@/lib/firebase";
 
@@ -66,46 +67,91 @@ export function subscribe<T>(
   return unsubscribe;
 }
 
-// ── Resolve the correct data path ──
-// Tries user-specific path first, then falls back to root-level path
+// ── Path Resolution Strategy ──
+//
+// For a CRM app that was originally a web app, data is typically stored at:
+//   ROOT level: /produtos, /clientes, /pedidos, /configLoja
+//
+// Some apps use user-scoped paths:
+//   /users/{uid}/produtos, /users/{uid}/clientes, etc.
+//
+// We detect which one has data and cache the result per session.
+// The detection tries ROOT FIRST because that's the most common pattern
+// for existing CRM web apps.
+
+// Cache for resolved paths so we don't re-detect every time
+const pathCache = new Map<string, string>();
 
 export function resolvePath(basePath: string, uid?: string | null): string {
-  if (uid) {
-    return `users/${uid}/${basePath}`;
-  }
-  return basePath;
+  const cacheKey = `${basePath}:${uid || "anon"}`;
+  const cached = pathCache.get(cacheKey);
+  if (cached) return cached;
+
+  // Default to root-level path (most common for CRM apps migrated from web)
+  const resolved = basePath;
+  pathCache.set(cacheKey, resolved);
+  return resolved;
 }
 
-// Try to detect where data lives — user-scoped or root-level
+// Detect where data actually lives — tries root first, then user-scoped
 export async function detectDataPath(
   basePath: string,
   uid?: string | null
 ): Promise<string> {
-  if (!uid) return basePath;
+  const cacheKey = `${basePath}:${uid || "anon"}`;
+  const cached = pathCache.get(cacheKey);
+  if (cached) return cached;
 
-  // Try user-scoped path first
-  const userPath = `users/${uid}/${basePath}`;
+  // Strategy 1: Try root-level path first (most common for existing CRM apps)
   try {
-    const userSnapshot = await get(ref(db, userPath));
-    if (userSnapshot.exists()) {
-      return userPath;
-    }
-  } catch {
-    // Permission denied or other error — try root path
-  }
-
-  // Try root-level path
-  try {
-    const rootSnapshot = await get(ref(db, basePath));
+    const rootSnapshot = await get(query(ref(db, basePath), limitToFirst(1)));
     if (rootSnapshot.exists()) {
+      console.log(`[Firebase] Detected ROOT path for "${basePath}"`);
+      pathCache.set(cacheKey, basePath);
       return basePath;
     }
-  } catch {
-    // Permission denied or other error
+  } catch (err: any) {
+    // If permission denied at root, it might mean data is user-scoped
+    const isPermissionDenied =
+      err?.code === "PERMISSION_DENIED" ||
+      err?.message?.includes("Permission denied");
+    if (!isPermissionDenied) {
+      console.warn(`[Firebase] Unexpected error reading root "${basePath}":`, err);
+    }
   }
 
-  // Default to user-scoped path (most common for multi-user apps)
-  return userPath;
+  // Strategy 2: Try user-scoped path
+  if (uid) {
+    const userPath = `users/${uid}/${basePath}`;
+    try {
+      const userSnapshot = await get(query(ref(db, userPath), limitToFirst(1)));
+      if (userSnapshot.exists()) {
+        console.log(`[Firebase] Detected USER-SCOPED path for "${basePath}": ${userPath}`);
+        pathCache.set(cacheKey, userPath);
+        return userPath;
+      }
+    } catch (err: any) {
+      const isPermissionDenied =
+        err?.code === "PERMISSION_DENIED" ||
+        err?.message?.includes("Permission denied");
+      if (!isPermissionDenied) {
+        console.warn(`[Firebase] Unexpected error reading user path "${userPath}":`, err);
+      }
+    }
+  }
+
+  // Strategy 3: If both paths returned no data but no permission errors,
+  // default to root-level path (user will create new data there)
+  // If root was permission-denied, also default to root — the onValue
+  // subscription will handle the error gracefully
+  console.log(`[Firebase] No existing data found for "${basePath}", using ROOT path`);
+  pathCache.set(cacheKey, basePath);
+  return basePath;
+}
+
+// Clear path cache (useful on logout)
+export function clearPathCache(): void {
+  pathCache.clear();
 }
 
 // ── Type definitions for Firebase collections ──

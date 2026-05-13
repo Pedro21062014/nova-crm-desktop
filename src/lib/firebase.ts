@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
@@ -16,4 +16,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getDatabase(app);
+
+// Set the correct persistence for Electron
+// In Electron, we need browserLocalPersistence (uses localStorage) which works reliably
+// The default indexedDB-based persistence can fail in Electron's file:// context
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn("[Firebase Auth] browserLocalPersistence failed, trying inMemoryPersistence:", err);
+  // Fallback to in-memory persistence if localStorage is not available
+  return setPersistence(auth, inMemoryPersistence);
+});
+
 export default app;

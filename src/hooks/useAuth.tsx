@@ -8,6 +8,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { clearPathCache } from "@/hooks/useFirebaseData";
 
 interface AuthContextType {
   user: User | null;
@@ -25,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      console.log("[Auth] State changed:", firebaseUser ? `logged in as ${firebaseUser.email}` : "logged out");
       setUser(firebaseUser);
       setLoading(false);
     });
@@ -32,7 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    console.log("[Auth] Login successful:", credential.user.email);
   };
 
   const signup = async (email: string, password: string, displayName?: string) => {
@@ -40,10 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (displayName && credential.user) {
       await updateProfile(credential.user, { displayName });
     }
+    console.log("[Auth] Signup successful:", credential.user.email);
   };
 
   const logout = async () => {
+    clearPathCache(); // Clear path cache on logout
     await signOut(auth);
+    console.log("[Auth] Logout successful");
   };
 
   return (
