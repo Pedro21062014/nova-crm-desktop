@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence } from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence, connectAuthEmulator } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
@@ -18,12 +18,24 @@ export const auth = getAuth(app);
 export const db = getDatabase(app);
 
 // Set the correct persistence for Electron
-// In Electron, we need browserLocalPersistence (uses localStorage) which works reliably
-// The default indexedDB-based persistence can fail in Electron's file:// context
-setPersistence(auth, browserLocalPersistence).catch((err) => {
-  console.warn("[Firebase Auth] browserLocalPersistence failed, trying inMemoryPersistence:", err);
-  // Fallback to in-memory persistence if localStorage is not available
-  return setPersistence(auth, inMemoryPersistence);
-});
+// The default indexedDB persistence can fail in Electron's file:// context
+// browserLocalPersistence uses localStorage which is more reliable
+// If even localStorage fails, fall back to inMemoryPersistence (session only)
+async function initAuthPersistence() {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    console.log("[Firebase Auth] Using browserLocalPersistence");
+  } catch (err) {
+    console.warn("[Firebase Auth] browserLocalPersistence failed, trying inMemoryPersistence:", err);
+    try {
+      await setPersistence(auth, inMemoryPersistence);
+      console.log("[Firebase Auth] Using inMemoryPersistence (session only - login will not persist across restarts)");
+    } catch (err2) {
+      console.error("[Firebase Auth] All persistence modes failed:", err2);
+    }
+  }
+}
+
+initAuthPersistence();
 
 export default app;
