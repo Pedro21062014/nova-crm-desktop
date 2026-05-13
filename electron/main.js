@@ -4,6 +4,9 @@ const path = require("path");
 // Disable GPU acceleration for headless environments
 app.disableHardwareAcceleration();
 
+// Select the correct icon format based on platform
+const iconPath = path.join(__dirname, "../build/" + (process.platform === "win32" ? "icon.ico" : "icon.png"));
+
 let mainWindow;
 
 function createWindow() {
@@ -16,7 +19,7 @@ function createWindow() {
     resizable: true,
     frame: true,
     title: "Nova CRM",
-    icon: path.join(__dirname, "../build/icon.png"),
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
