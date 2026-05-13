@@ -26,6 +26,15 @@ const emptyProduct: Omit<Product, "createdAt" | "updatedAt"> = {
   ativo: true,
 };
 
+// Helper to get product name (compatible with both "nome" and "name" fields)
+function pName(p: any): string { return p.nome || p.name || ""; }
+function pPrice(p: any): number { return p.preco || p.price || 0; }
+function pCategory(p: any): string { return p.categoria || p.category || ""; }
+function pDesc(p: any): string { return p.descricao || p.description || ""; }
+function pImage(p: any): string { return p.imagem || p.image || p.imageUrl || ""; }
+function pStock(p: any): number { return p.estoque || p.stock || p.quantity || 0; }
+function pActive(p: any): boolean { return p.ativo !== false && p.active !== false; }
+
 export function ProductsPage() {
   const { items: products, loading, addItem, editItem, deleteItem } = useProducts();
   const [search, setSearch] = useState("");
@@ -35,11 +44,13 @@ export function ProductsPage() {
   const [form, setForm] = useState(emptyProduct);
   const [saving, setSaving] = useState(false);
 
-  const categories = ["Todos", ...Array.from(new Set(products.map((p) => p.categoria).filter(Boolean)))];
+  const categories = ["Todos", ...Array.from(new Set(products.map((p) => pCategory(p)).filter(Boolean)))];
 
   const filtered = products.filter((p) => {
-    const matchesSearch = p.nome?.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = categoryFilter === "Todos" || p.categoria === categoryFilter;
+    const name = pName(p);
+    const cat = pCategory(p);
+    const matchesSearch = name?.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = categoryFilter === "Todos" || cat === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
@@ -52,13 +63,13 @@ export function ProductsPage() {
   const openEdit = (product: Product & { id: string }) => {
     setEditingId(product.id);
     setForm({
-      nome: product.nome,
-      preco: product.preco,
-      categoria: product.categoria,
-      descricao: product.descricao || "",
-      imagem: product.imagem || "",
-      estoque: product.estoque || 0,
-      ativo: product.ativo !== false,
+      nome: pName(product),
+      preco: pPrice(product),
+      categoria: pCategory(product),
+      descricao: pDesc(product),
+      imagem: pImage(product),
+      estoque: pStock(product),
+      ativo: pActive(product),
     });
     setModalOpen(true);
   };
@@ -161,64 +172,71 @@ export function ProductsPage() {
         </motion.div>
       ) : (
         <motion.div variants={containerVariants} className="grid grid-cols-4 gap-5">
-          {filtered.map((product) => (
-            <motion.div key={product.id} variants={itemVariants}>
-              <Card hover className="group relative overflow-hidden">
-                {/* Product Image */}
-                <div className="mb-4 h-36 rounded-xl bg-muted overflow-hidden">
-                  {product.imagem ? (
-                    <img
-                      src={product.imagem}
-                      alt={product.nome}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center">
-                      <Package className="h-10 w-10 text-muted-foreground/30" />
-                    </div>
-                  )}
-                </div>
-
-                {/* Info */}
-                <div className="space-y-1.5">
-                  <div className="flex items-start justify-between">
-                    <h3 className="text-sm font-semibold text-foreground line-clamp-1">
-                      {product.nome}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-semibold text-accent">
-                      {formatCurrency(product.preco || 0)}
-                    </span>
-                    {product.categoria && (
-                      <Badge variant="info">{product.categoria}</Badge>
+          {filtered.map((product) => {
+            const name = pName(product);
+            const price = pPrice(product);
+            const cat = pCategory(product);
+            const image = pImage(product);
+            const stock = pStock(product);
+            return (
+              <motion.div key={product.id} variants={itemVariants}>
+                <Card hover className="group relative overflow-hidden">
+                  {/* Product Image */}
+                  <div className="mb-4 h-36 rounded-xl bg-muted overflow-hidden">
+                    {image ? (
+                      <img
+                        src={image}
+                        alt={name}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Package className="h-10 w-10 text-muted-foreground/30" />
+                      </div>
                     )}
                   </div>
-                  {product.estoque !== undefined && (
-                    <p className="text-xs text-muted-foreground">
-                      Estoque: {product.estoque} unidades
-                    </p>
-                  )}
-                </div>
 
-                {/* Actions overlay */}
-                <div className="absolute right-3 top-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => openEdit(product as Product & { id: string })}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm hover:bg-accent hover:text-white transition-colors"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(product.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm hover:bg-danger hover:text-white transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </Card>
-            </motion.div>
-          ))}
+                  {/* Info */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-start justify-between">
+                      <h3 className="text-sm font-semibold text-foreground line-clamp-1">
+                        {name}
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-semibold text-accent">
+                        {formatCurrency(price)}
+                      </span>
+                      {cat && (
+                        <Badge variant="info">{cat}</Badge>
+                      )}
+                    </div>
+                    {stock !== undefined && stock !== 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Estoque: {stock} unidades
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Actions overlay */}
+                  <div className="absolute right-3 top-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => openEdit(product as Product & { id: string })}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm hover:bg-accent hover:text-white transition-colors"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(product.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm hover:bg-danger hover:text-white transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </Card>
+              </motion.div>
+            );
+          })}
         </motion.div>
       )}
 

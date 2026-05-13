@@ -8,7 +8,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { clearPathCache } from "@/hooks/useFirebaseData";
+import { setMerchantId } from "@/services/firebase";
 
 interface AuthContextType {
   user: User | null;
@@ -28,6 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       console.log("[Auth] State changed:", firebaseUser ? `logged in as ${firebaseUser.email}` : "logged out");
       setUser(firebaseUser);
+      // Set the merchant ID for Firestore path resolution
+      setMerchantId(firebaseUser?.uid || null);
       setLoading(false);
     });
     return unsubscribe;
@@ -35,11 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const credential = await signInWithEmailAndPassword(auth, email, password);
+    setMerchantId(credential.user.uid);
     console.log("[Auth] Login successful:", credential.user.email);
   };
 
   const signup = async (email: string, password: string, displayName?: string) => {
     const credential = await createUserWithEmailAndPassword(auth, email, password);
+    setMerchantId(credential.user.uid);
     if (displayName && credential.user) {
       await updateProfile(credential.user, { displayName });
     }
@@ -47,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    clearPathCache(); // Clear path cache on logout
+    setMerchantId(null);
     await signOut(auth);
     console.log("[Auth] Logout successful");
   };

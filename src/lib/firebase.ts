@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence, connectAuthEmulator } from "firebase/auth";
-import { getDatabase } from "firebase/database";
+import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence } from "firebase/auth";
+import { getFirestore, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABooLzKOpSqcmQ5VjAydDgbgiUvpMEMh8",
@@ -15,12 +15,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getDatabase(app);
+export const db = getFirestore(app);
 
 // Set the correct persistence for Electron
-// The default indexedDB persistence can fail in Electron's file:// context
-// browserLocalPersistence uses localStorage which is more reliable
-// If even localStorage fails, fall back to inMemoryPersistence (session only)
 async function initAuthPersistence() {
   try {
     await setPersistence(auth, browserLocalPersistence);
@@ -29,13 +26,30 @@ async function initAuthPersistence() {
     console.warn("[Firebase Auth] browserLocalPersistence failed, trying inMemoryPersistence:", err);
     try {
       await setPersistence(auth, inMemoryPersistence);
-      console.log("[Firebase Auth] Using inMemoryPersistence (session only - login will not persist across restarts)");
+      console.log("[Firebase Auth] Using inMemoryPersistence (session only)");
     } catch (err2) {
       console.error("[Firebase Auth] All persistence modes failed:", err2);
     }
   }
 }
 
+// Enable Firestore offline persistence
+async function initFirestorePersistence() {
+  try {
+    await enableMultiTabIndexedDbPersistence(db);
+    console.log("[Firestore] Offline persistence enabled");
+  } catch (err: any) {
+    if (err.code === "failed-precondition") {
+      console.warn("[Firestore] Multiple tabs open, persistence enabled in first tab only");
+    } else if (err.code === "unimplemented") {
+      console.warn("[Firestore] Browser doesn't support persistence");
+    } else {
+      console.warn("[Firestore] Persistence error:", err);
+    }
+  }
+}
+
 initAuthPersistence();
+initFirestorePersistence();
 
 export default app;

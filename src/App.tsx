@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/layout";
 import { LoginPage } from "@/components/auth/LoginPage";
@@ -42,10 +42,10 @@ function ProtectedRoutes() {
 
 export function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AuthProvider>
         <ProtectedRoutes />
       </AuthProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

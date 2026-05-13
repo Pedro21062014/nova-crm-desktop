@@ -16,6 +16,14 @@ import { useClients } from "@/hooks/useFirebaseData";
 import { type Client } from "@/services/firebase";
 import { formatDate, cn } from "@/lib/utils";
 
+// Helpers for field name compatibility
+function cName(c: any): string { return c.nome || c.name || ""; }
+function cEmail(c: any): string { return c.email || ""; }
+function cPhone(c: any): string { return c.telefone || c.phone || ""; }
+function cAddr(c: any): string { return c.endereco || c.address || ""; }
+function cDoc(c: any): string { return c.cpfCnpj || c.document || ""; }
+function cNotes(c: any): string { return c.observacoes || c.notes || ""; }
+
 const emptyClient: Omit<Client, "createdAt" | "updatedAt"> = {
   nome: "",
   email: "",
@@ -35,9 +43,9 @@ export function ClientsPage() {
   const [saving, setSaving] = useState(false);
 
   const filtered = clients.filter((c) =>
-    c.nome?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase()) ||
-    c.telefone?.includes(search)
+    cName(c)?.toLowerCase().includes(search.toLowerCase()) ||
+    cEmail(c)?.toLowerCase().includes(search.toLowerCase()) ||
+    cPhone(c)?.includes(search)
   );
 
   const selectedClient = clients.find((c) => c.id === selectedId);
@@ -51,12 +59,12 @@ export function ClientsPage() {
   const openEdit = (client: Client & { id: string }) => {
     setEditingId(client.id);
     setForm({
-      nome: client.nome,
-      email: client.email,
-      telefone: client.telefone,
-      endereco: client.endereco || "",
-      cpfCnpj: client.cpfCnpj || "",
-      observacoes: client.observacoes || "",
+      nome: cName(client),
+      email: cEmail(client),
+      telefone: cPhone(client),
+      endereco: cAddr(client),
+      cpfCnpj: cDoc(client),
+      observacoes: cNotes(client),
     });
     setModalOpen(true);
   };
@@ -123,39 +131,44 @@ export function ClientsPage() {
             </div>
           ) : (
             <div className="space-y-1">
-              {filtered.map((client) => (
-                <button
-                  key={client.id}
-                  onClick={() => setSelectedId(client.id)}
-                  className={cn(
-                    "w-full text-left rounded-xl p-3 transition-colors",
-                    selectedId === client.id
-                      ? "bg-accent-light border border-accent/20"
-                      : "hover:bg-muted"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium",
-                        selectedId === client.id
-                          ? "bg-accent text-white"
-                          : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {client.nome?.charAt(0)?.toUpperCase() || "?"}
+              {filtered.map((client) => {
+                const name = cName(client);
+                const email = cEmail(client);
+                const phone = cPhone(client);
+                return (
+                  <button
+                    key={client.id}
+                    onClick={() => setSelectedId(client.id)}
+                    className={cn(
+                      "w-full text-left rounded-xl p-3 transition-colors",
+                      selectedId === client.id
+                        ? "bg-accent-light border border-accent/20"
+                        : "hover:bg-muted"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={cn(
+                          "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium",
+                          selectedId === client.id
+                            ? "bg-accent text-white"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {name?.charAt(0)?.toUpperCase() || "?"}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {name}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {email || phone}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {client.nome}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {client.email || client.telefone}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -177,11 +190,11 @@ export function ClientsPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-white text-xl font-semibold">
-                    {selectedClient.nome?.charAt(0)?.toUpperCase()}
+                    {cName(selectedClient)?.charAt(0)?.toUpperCase()}
                   </div>
                   <div>
                     <h2 className="text-xl font-semibold text-foreground">
-                      {selectedClient.nome}
+                      {cName(selectedClient)}
                     </h2>
                     <p className="text-sm text-muted-foreground">
                       Cliente desde{" "}
@@ -219,7 +232,7 @@ export function ClientsPage() {
                     <div>
                       <p className="text-xs text-muted-foreground">Email</p>
                       <p className="text-sm font-medium text-foreground">
-                        {selectedClient.email || "Não informado"}
+                        {cEmail(selectedClient) || "Não informado"}
                       </p>
                     </div>
                   </div>
@@ -232,7 +245,7 @@ export function ClientsPage() {
                     <div>
                       <p className="text-xs text-muted-foreground">Telefone</p>
                       <p className="text-sm font-medium text-foreground">
-                        {selectedClient.telefone || "Não informado"}
+                        {cPhone(selectedClient) || "Não informado"}
                       </p>
                     </div>
                   </div>
@@ -245,7 +258,7 @@ export function ClientsPage() {
                     <div>
                       <p className="text-xs text-muted-foreground">Endereço</p>
                       <p className="text-sm font-medium text-foreground">
-                        {selectedClient.endereco || "Não informado"}
+                        {cAddr(selectedClient) || "Não informado"}
                       </p>
                     </div>
                   </div>
@@ -258,7 +271,7 @@ export function ClientsPage() {
                     <div>
                       <p className="text-xs text-muted-foreground">CPF/CNPJ</p>
                       <p className="text-sm font-medium text-foreground">
-                        {selectedClient.cpfCnpj || "Não informado"}
+                        {cDoc(selectedClient) || "Não informado"}
                       </p>
                     </div>
                   </div>
@@ -266,11 +279,11 @@ export function ClientsPage() {
               </div>
 
               {/* Notes */}
-              {selectedClient.observacoes && (
+              {cNotes(selectedClient) && (
                 <Card>
                   <h3 className="text-sm font-medium text-foreground mb-2">Observações</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    {selectedClient.observacoes}
+                    {cNotes(selectedClient)}
                   </p>
                 </Card>
               )}

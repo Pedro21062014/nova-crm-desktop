@@ -9,9 +9,20 @@ import {
 } from "lucide-react";
 import { Card, Skeleton } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
+import { useStoreConfig } from "@/hooks/useStoreConfig";
 import { formatCurrency } from "@/lib/utils";
 import { WeeklyChart } from "@/components/dashboard/WeeklyChart";
 import { RecentOrders } from "@/components/dashboard/RecentOrders";
+
+// Helpers for field name compatibility
+function getOrderType(o: any): "entrada" | "saida" {
+  const tipo = o.tipo || o.type;
+  if (tipo === "entrada" || tipo === "in") return "entrada";
+  if (tipo === "saida" || tipo === "out" || tipo === "expense") return "saida";
+  return "entrada";
+}
+
+function getOrderStatus(o: any): string { return o.status || "pendente"; }
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -30,25 +41,29 @@ export function DashboardPage() {
   const { items: orders, loading: ordersLoading } = useOrders();
   const { items: clients, loading: clientsLoading } = useClients();
   const { items: products, loading: productsLoading } = useProducts();
+  const { config: storeConfig } = useStoreConfig();
 
   const totalRevenue = orders
-    .filter((o) => o.status === "pago" && o.tipo === "entrada")
+    .filter((o) => (getOrderStatus(o) === "pago" || getOrderStatus(o) === "paid") && getOrderType(o) === "entrada")
     .reduce((sum, o) => sum + (o.total || 0), 0);
 
-  const pendingOrders = orders.filter((o) => o.status === "pendente").length;
+  const pendingOrders = orders.filter((o) => getOrderStatus(o) === "pendente" || getOrderStatus(o) === "pending").length;
   const totalClients = clients.length;
   const totalProducts = products.length;
 
   const revenueVsExpenses = orders.reduce(
     (acc, o) => {
-      if (o.status === "pago") {
-        if (o.tipo === "entrada") acc.entradas += o.total || 0;
+      const status = getOrderStatus(o);
+      if (status === "pago" || status === "paid") {
+        if (getOrderType(o) === "entrada") acc.entradas += o.total || 0;
         else acc.saidas += o.total || 0;
       }
       return acc;
     },
     { entradas: 0, saidas: 0 }
   );
+
+  const storeName = storeConfig?.nomeLoja || storeConfig?.name || "Nova CRM";
 
   const stats = [
     {
@@ -104,7 +119,7 @@ export function DashboardPage() {
           Dashboard
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Visão geral do seu negócio
+          Visão geral de {storeName}
         </p>
       </motion.div>
 

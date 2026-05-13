@@ -1,160 +1,204 @@
 import {
-  ref,
-  get,
-  set,
-  push,
-  update,
-  remove,
-  onValue,
-  type Unsubscribe,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
   query,
-  limitToFirst,
-} from "firebase/database";
+  limit,
+  where,
+  orderBy,
+  Timestamp,
+  type Unsubscribe,
+  type DocumentData,
+  type DocumentSnapshot,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 
-// ── Generic CRUD helpers ──
+// ── Merchant Resolution ──
+//
+// The Firestore structure uses merchants/{merchantId}/... subcollections.
+// The merchantId is the authenticated user's UID.
+// We resolve the base path dynamically based on auth state.
 
-export async function getAll<T>(path: string): Promise<Record<string, T> | null> {
-  const snapshot = await get(ref(db, path));
-  return snapshot.val() as Record<string, T> | null;
+let _merchantId: string | null = null;
+
+export function setMerchantId(uid: string | null) {
+  _merchantId = uid;
 }
 
-export async function getById<T>(path: string, id: string): Promise<T | null> {
-  const snapshot = await get(ref(db, `${path}/${id}`));
-  return snapshot.val() as T | null;
+export function getMerchantId(): string | null {
+  return _merchantId;
+}
+
+function merchantPath(): string {
+  if (!_merchantId) throw new Error("Usuário não autenticado");
+  return `merchants/${_merchantId}`;
+}
+
+// ── Generic CRUD helpers (Firestore) ──
+
+export async function getAll<T>(subcollection: string): Promise<Record<string, T> | null> {
+  const colRef = collection(db, merchantPath(), subcollection);
+  const snapshot = await getDocs(colRef);
+  if (snapshot.empty) return null;
+  const result: Record<string, T> = {};
+  snapshot.forEach((doc) => {
+    result[doc.id] = doc.data() as T;
+  });
+  return result;
+}
+
+export async function getById<T>(subcollection: string, id: string): Promise<T | null> {
+  const docRef = doc(db, merchantPath(), subcollection, id);
+  const snapshot = await getDoc(docRef);
+  return snapshot.exists() ? (snapshot.data() as T) : null;
 }
 
 export async function create<T extends Record<string, unknown>>(
-  path: string,
+  subcollection: string,
   data: T
 ): Promise<string> {
-  const newRef = push(ref(db, path));
-  await set(newRef, { ...data, createdAt: Date.now(), updatedAt: Date.now() });
-  return newRef.key!;
+  const colRef = collection(db, merchantPath(), subcollection);
+  const docRef = await addDoc(colRef, {
+    ...data,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  });
+  return docRef.id;
 }
 
-export async function updateItem<T extends Record<string, unknown>>(
-  path: string,
+export async function createWithId<T extends Record<string, unknown>>(
+  subcollection: string,
   id: string,
-  data: Partial<T>
+  data: T
 ): Promise<void> {
-  await update(ref(db, `${path}/${id}`), {
+  const docRef = doc(db, merchantPath(), subcollection, id);
+  await setDoc(docRef, {
     ...data,
-    updatedAt: Date.now(),
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
   });
 }
 
-export async function removeItem(path: string, id: string): Promise<void> {
-  await remove(ref(db, `${path}/${id}`));
+export async function updateItem<T extends Record<string, unknown>>(
+  subcollection: string,
+  id: string,
+  data: Partial<T>
+): Promise<void> {
+  const docRef = doc(db, merchantPath(), subcollection, id);
+  await updateDoc(docRef, {
+    ...data,
+    updatedAt: Timestamp.now(),
+  });
+}
+
+export async function removeItem(subcollection: string, id: string): Promise<void> {
+  const docRef = doc(db, merchantPath(), subcollection, id);
+  await deleteDoc(docRef);
 }
 
 export function subscribe<T>(
-  path: string,
+  subcollection: string,
   callback: (data: Record<string, T> | null) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const dbRef = ref(db, path);
-  const unsubscribe = onValue(
-    dbRef,
+  const colRef = collection(db, merchantPath(), subcollection);
+  const q = query(colRef, orderBy("createdAt", "desc"));
+
+  return onSnapshot(
+    q,
     (snapshot) => {
-      callback(snapshot.val() as Record<string, T> | null);
+      const result: Record<string, T> = {};
+      snapshot.forEach((doc) => {
+        result[doc.id] = doc.data() as T;
+      });
+      callback(Object.keys(result).length > 0 ? result : null);
     },
     (error) => {
-      console.error(`[Firebase] Error subscribing to ${path}:`, error);
+      console.error(`[Firestore] Error subscribing to ${subcollection}:`, error);
       if (onError) onError(error);
     }
   );
-  return unsubscribe;
 }
 
-// ── Path Resolution Strategy ──
-//
-// For a CRM app that was originally a web app, data is typically stored at:
-//   ROOT level: /produtos, /clientes, /pedidos, /configLoja
-//
-// Some apps use user-scoped paths:
-//   /users/{uid}/produtos, /users/{uid}/clientes, etc.
-//
-// We detect which one has data and cache the result per session.
-// The detection tries ROOT FIRST because that's the most common pattern
-// for existing CRM web apps.
+// Subscribe to a single document
+export function subscribeDoc<T>(
+  subcollection: string,
+  docId: string,
+  callback: (data: T | null) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const docRef = doc(db, merchantPath(), subcollection, docId);
 
-// Cache for resolved paths so we don't re-detect every time
-const pathCache = new Map<string, string>();
-
-export function resolvePath(basePath: string, uid?: string | null): string {
-  const cacheKey = `${basePath}:${uid || "anon"}`;
-  const cached = pathCache.get(cacheKey);
-  if (cached) return cached;
-
-  // Default to root-level path (most common for CRM apps migrated from web)
-  const resolved = basePath;
-  pathCache.set(cacheKey, resolved);
-  return resolved;
-}
-
-// Detect where data actually lives — tries root first, then user-scoped
-export async function detectDataPath(
-  basePath: string,
-  uid?: string | null
-): Promise<string> {
-  const cacheKey = `${basePath}:${uid || "anon"}`;
-  const cached = pathCache.get(cacheKey);
-  if (cached) return cached;
-
-  // Strategy 1: Try root-level path first (most common for existing CRM apps)
-  try {
-    const rootSnapshot = await get(query(ref(db, basePath), limitToFirst(1)));
-    if (rootSnapshot.exists()) {
-      console.log(`[Firebase] Detected ROOT path for "${basePath}"`);
-      pathCache.set(cacheKey, basePath);
-      return basePath;
-    }
-  } catch (err: any) {
-    // If permission denied at root, it might mean data is user-scoped
-    const isPermissionDenied =
-      err?.code === "PERMISSION_DENIED" ||
-      err?.message?.includes("Permission denied");
-    if (!isPermissionDenied) {
-      console.warn(`[Firebase] Unexpected error reading root "${basePath}":`, err);
-    }
-  }
-
-  // Strategy 2: Try user-scoped path
-  if (uid) {
-    const userPath = `users/${uid}/${basePath}`;
-    try {
-      const userSnapshot = await get(query(ref(db, userPath), limitToFirst(1)));
-      if (userSnapshot.exists()) {
-        console.log(`[Firebase] Detected USER-SCOPED path for "${basePath}": ${userPath}`);
-        pathCache.set(cacheKey, userPath);
-        return userPath;
+  return onSnapshot(
+    docRef,
+    (snapshot: DocumentSnapshot<DocumentData>) => {
+      if (snapshot.exists()) {
+        callback({ id: snapshot.id, ...snapshot.data() } as T);
+      } else {
+        callback(null);
       }
-    } catch (err: any) {
-      const isPermissionDenied =
-        err?.code === "PERMISSION_DENIED" ||
-        err?.message?.includes("Permission denied");
-      if (!isPermissionDenied) {
-        console.warn(`[Firebase] Unexpected error reading user path "${userPath}":`, err);
-      }
+    },
+    (error) => {
+      console.error(`[Firestore] Error subscribing to doc ${subcollection}/${docId}:`, error);
+      if (onError) onError(error);
     }
-  }
-
-  // Strategy 3: If both paths returned no data but no permission errors,
-  // default to root-level path (user will create new data there)
-  // If root was permission-denied, also default to root — the onValue
-  // subscription will handle the error gracefully
-  console.log(`[Firebase] No existing data found for "${basePath}", using ROOT path`);
-  pathCache.set(cacheKey, basePath);
-  return basePath;
+  );
 }
 
-// Clear path cache (useful on logout)
-export function clearPathCache(): void {
-  pathCache.clear();
+// ── Merchant Document Helpers ──
+
+export async function getMerchantData<T>(): Promise<T | null> {
+  const docRef = doc(db, `merchants/${_merchantId}`);
+  const snapshot = await getDoc(docRef);
+  return snapshot.exists() ? (snapshot.data() as T) : null;
 }
 
-// ── Type definitions for Firebase collections ──
+export async function updateMerchantData<T>(data: Partial<T>): Promise<void> {
+  const docRef = doc(db, `merchants/${_merchantId}`);
+  await updateDoc(docRef, {
+    ...data,
+    updatedAt: Timestamp.now(),
+  } as Record<string, unknown>);
+}
+
+export function subscribeMerchant<T>(
+  callback: (data: T | null) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const docRef = doc(db, `merchants/${_merchantId}`);
+
+  return onSnapshot(
+    docRef,
+    (snapshot: DocumentSnapshot<DocumentData>) => {
+      if (snapshot.exists()) {
+        callback({ id: snapshot.id, ...snapshot.data() } as T);
+      } else {
+        callback(null);
+      }
+    },
+    (error) => {
+      console.error(`[Firestore] Error subscribing to merchant:`, error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+// ── Detect if merchant document exists ──
+export async function merchantExists(): Promise<boolean> {
+  if (!_merchantId) return false;
+  const docRef = doc(db, `merchants/${_merchantId}`);
+  const snapshot = await getDoc(docRef);
+  return snapshot.exists();
+}
+
+// ── Type definitions for Firestore collections ──
 
 export interface Product {
   nome: string;
@@ -164,8 +208,8 @@ export interface Product {
   imagem?: string;
   estoque?: number;
   ativo?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
 }
 
 export interface Client {
@@ -175,8 +219,8 @@ export interface Client {
   endereco?: string;
   cpfCnpj?: string;
   observacoes?: string;
-  createdAt?: number;
-  updatedAt?: number;
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
 }
 
 export interface Order {
@@ -184,12 +228,13 @@ export interface Order {
   clienteNome: string;
   itens: OrderItem[];
   total: number;
-  status: "pago" | "pendente" | "cancelado";
-  tipo: "entrada" | "saida";
+  status: string;
+  tipo: string;
   formaPagamento?: string;
   observacoes?: string;
-  createdAt?: number;
-  updatedAt?: number;
+  paymentStatus?: string;
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
 }
 
 export interface OrderItem {
@@ -201,12 +246,15 @@ export interface OrderItem {
 }
 
 export interface StoreConfig {
-  nomeLoja: string;
+  nomeLoja?: string;
+  name?: string;
   slogan?: string;
   logo?: string;
   telefone?: string;
+  phone?: string;
   email?: string;
   endereco?: string;
+  address?: string;
   cnpj?: string;
   horarioFuncionamento?: string;
   redesSociais?: {
@@ -214,15 +262,25 @@ export interface StoreConfig {
     facebook?: string;
     whatsapp?: string;
   };
-  updatedAt?: number;
+  isSuperuser?: boolean;
+  isBlocked?: boolean;
+  updatedAt?: Timestamp | number;
 }
 
-// ── Path constants ──
+// ── Collection names ──
 
-export const PATHS = {
-  PRODUCTS: "produtos",
-  CLIENTS: "clientes",
-  ORDERS: "pedidos",
-  STORE_CONFIG: "configLoja",
-  USERS: "usuarios",
+export const COLLECTIONS = {
+  PRODUCTS: "products",
+  CLIENTS: "clients",
+  ORDERS: "orders",
+  COUPONS: "coupons",
+  NOTIFICATIONS: "notifications",
 } as const;
+
+// Helper to convert Firestore Timestamp to milliseconds
+export function toMs(ts: Timestamp | number | undefined): number {
+  if (!ts) return 0;
+  if (typeof ts === "number") return ts;
+  if (ts instanceof Timestamp) return ts.toMillis();
+  return 0;
+}

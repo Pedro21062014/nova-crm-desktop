@@ -8,7 +8,23 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import type { Order } from "@/services/firebase";
+import { toMs, type Order } from "@/services/firebase";
+
+// Helpers for field name compatibility
+function getOrderType(o: any): "entrada" | "saida" {
+  const tipo = o.tipo || o.type;
+  if (tipo === "entrada" || tipo === "in") return "entrada";
+  if (tipo === "saida" || tipo === "out" || tipo === "expense") return "saida";
+  return "entrada";
+}
+
+function getOrderStatus(o: any): string {
+  return o.status || "pendente";
+}
+
+function isPaid(status: string): boolean {
+  return status === "pago" || status === "paid" || status === "completed";
+}
 
 interface WeeklyChartProps {
   orders: Order[];
@@ -25,16 +41,16 @@ export function WeeklyChart({ orders }: WeeklyChartProps) {
     const dayEnd = new Date(date.setHours(23, 59, 59, 999)).getTime();
 
     const dayOrders = orders.filter((o) => {
-      const ts = o.createdAt || 0;
+      const ts = toMs(o.createdAt);
       return ts >= dayStart && ts <= dayEnd;
     });
 
     const entradas = dayOrders
-      .filter((o) => o.tipo === "entrada" && o.status === "pago")
+      .filter((o) => getOrderType(o) === "entrada" && isPaid(getOrderStatus(o)))
       .reduce((s, o) => s + (o.total || 0), 0);
 
     const saidas = dayOrders
-      .filter((o) => o.tipo === "saida" && o.status === "pago")
+      .filter((o) => getOrderType(o) === "saida" && isPaid(getOrderStatus(o)))
       .reduce((s, o) => s + (o.total || 0), 0);
 
     return {

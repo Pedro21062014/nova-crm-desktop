@@ -2,7 +2,7 @@
   "name": "nova-crm",
   "productName": "Nova CRM",
   "private": false,
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Nova CRM - Aplicativo Desktop",
   "author": "Nova CRM Team",
   "homepage": "https://novacrm.com.br",
@@ -64,13 +64,13 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "zip",
           "arch": [
             "x64"
           ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

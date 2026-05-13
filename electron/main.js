@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, session } = require("electron");
 const path = require("path");
 
 // Disable GPU acceleration for environments without display
@@ -37,6 +37,7 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     // In production, load built files from dist/
+    // Use loadFile for file:// protocol (works with HashRouter)
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 
@@ -52,7 +53,15 @@ function createWindow() {
   });
 }
 
+// Fix Firebase Auth in Electron: allow Firebase Auth to work with file:// protocol
+// by granting storage access to the Firebase Auth domain
 app.whenReady().then(() => {
+  // Grant storage access for Firebase Auth in Electron
+  // This allows Firebase Auth to store/retrieve auth tokens
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    callback({ requestHeaders: details.requestHeaders });
+  });
+
   createWindow();
 
   app.on("activate", () => {

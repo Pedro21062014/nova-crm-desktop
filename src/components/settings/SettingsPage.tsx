@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Store, Save, Globe, Phone, Mail, Clock, Camera, Globe2, MessageCircle } from "lucide-react";
 import { Card, Button, Input, Skeleton } from "@/components/ui";
-import { useStoreConfig } from "@/hooks/useFirebaseData";
+import { useStoreConfig } from "@/hooks/useStoreConfig";
 import { type StoreConfig } from "@/services/firebase";
 
 const containerVariants = {
@@ -32,40 +32,32 @@ const emptyConfig: StoreConfig = {
 };
 
 export function SettingsPage() {
-  const { items: configItems, loading, addItem, editItem } = useStoreConfig();
+  const { config, loading, saveConfig } = useStoreConfig();
   const [form, setForm] = useState<StoreConfig>(emptyConfig);
-  const [configId, setConfigId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (configItems.length > 0) {
-      const config = configItems[0];
-      setConfigId(config.id);
+    if (config) {
       setForm({
-        nomeLoja: config.nomeLoja || "",
+        nomeLoja: config.nomeLoja || config.name || "",
         slogan: config.slogan || "",
         logo: config.logo || "",
-        telefone: config.telefone || "",
+        telefone: config.telefone || config.phone || "",
         email: config.email || "",
-        endereco: config.endereco || "",
+        endereco: config.endereco || config.address || "",
         cnpj: config.cnpj || "",
         horarioFuncionamento: config.horarioFuncionamento || "",
         redesSociais: config.redesSociais || emptyConfig.redesSociais,
       });
     }
-  }, [configItems]);
+  }, [config]);
 
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
     try {
-      if (configId) {
-        await editItem(configId, form as unknown as Partial<Record<string, unknown>>);
-      } else {
-        const id = await addItem(form as unknown as Record<string, unknown>);
-        setConfigId(id);
-      }
+      await saveConfig(form);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {

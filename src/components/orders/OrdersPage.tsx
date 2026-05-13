@@ -18,6 +18,12 @@ import {
 } from "@/services/firebase";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
+// Helpers for field name compatibility
+function pName(p: any): string { return p.nome || p.name || ""; }
+function pPrice(p: any): number { return p.preco || p.price || 0; }
+function cName(c: any): string { return c.nome || c.name || ""; }
+function oClientName(o: any): string { return o.clienteNome || o.customerName || ""; }
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.06 } },
@@ -28,16 +34,31 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
-const statusConfig = {
-  pago: { label: "Pago", variant: "success" as const },
-  pendente: { label: "Pendente", variant: "warning" as const },
-  cancelado: { label: "Cancelado", variant: "danger" as const },
+const statusConfig: Record<string, { label: string; variant: "success" | "warning" | "danger" | "info" }> = {
+  pago: { label: "Pago", variant: "success" },
+  paid: { label: "Pago", variant: "success" },
+  pendente: { label: "Pendente", variant: "warning" },
+  pending: { label: "Pendente", variant: "warning" },
+  cancelado: { label: "Cancelado", variant: "danger" },
+  cancelled: { label: "Cancelado", variant: "danger" },
+  completed: { label: "Concluído", variant: "success" },
 };
 
 type StatusFilter = "todos" | "pago" | "pendente" | "cancelado";
 type TypeFilter = "todos" | "entrada" | "saida";
 
-const emptyOrder: Omit<Order, "createdAt" | "updatedAt"> = {
+interface OrderForm {
+  clienteId: string;
+  clienteNome: string;
+  itens: OrderItem[];
+  total: number;
+  status: string;
+  tipo: string;
+  formaPagamento: string;
+  observacoes: string;
+}
+
+const emptyOrder: OrderForm = {
   clienteId: "",
   clienteNome: "",
   itens: [],
@@ -57,33 +78,51 @@ export function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("todos");
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState(emptyOrder);
+  const [form, setForm] = useState<OrderForm>(emptyOrder);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Normalize order status for display
+  const getStatus = (status: string) => {
+    return statusConfig[status] || statusConfig.pendente;
+  };
+
+  // Normalize order type
+  const getOrderType = (order: any): "entrada" | "saida" => {
+    const tipo = order.tipo || order.type;
+    if (tipo === "entrada" || tipo === "in") return "entrada";
+    if (tipo === "saida" || tipo === "out" || tipo === "expense") return "saida";
+    return "entrada";
+  };
+
   // Summary stats
   const summary = useMemo(() => {
-    const paidOrders = orders.filter((o) => o.status === "pago");
+    const paidOrders = orders.filter((o) => o.status === "pago" || o.status === "paid");
     const entradas = paidOrders
-      .filter((o) => o.tipo === "entrada")
+      .filter((o) => getOrderType(o) === "entrada")
       .reduce((s, o) => s + (o.total || 0), 0);
     const saidas = paidOrders
-      .filter((o) => o.tipo === "saida")
+      .filter((o) => getOrderType(o) === "saida")
       .reduce((s, o) => s + (o.total || 0), 0);
     return {
       entradas,
       saidas,
       saldo: entradas - saidas,
-      pendentes: orders.filter((o) => o.status === "pendente").length,
+      pendentes: orders.filter((o) => o.status === "pendente" || o.status === "pending").length,
     };
   }, [orders]);
 
   const filtered = orders.filter((o) => {
+    const cname = oClientName(o);
     const matchesSearch =
-      o.clienteNome?.toLowerCase().includes(search.toLowerCase()) ||
+      cname?.toLowerCase().includes(search.toLowerCase()) ||
       o.observacoes?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "todos" || o.status === statusFilter;
-    const matchesType = typeFilter === "todos" || o.tipo === typeFilter;
+    const orderStatus = o.status || "pendente";
+    const matchesStatus = statusFilter === "todos" || orderStatus === statusFilter || 
+      (statusFilter === "pago" && orderStatus === "paid") ||
+      (statusFilter === "pendente" && orderStatus === "pending") ||
+      (statusFilter === "cancelado" && (orderStatus === "cancelled" || orderStatus === "canceled"));
+    const matchesType = typeFilter === "todos" || getOrderType(o) === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
   });
 
@@ -117,9 +156,9 @@ export function OrdersPage() {
       updated[index] = {
         ...updated[index],
         produtoId: value as string,
-        produtoNome: product?.nome || "",
-        precoUnitario: product?.preco || 0,
-        subtotal: (product?.preco || 0) * updated[index].quantidade,
+        produtoNome: pName(product),
+        precoUnitario: pPrice(product),
+        subtotal: pPrice(product) * updated[index].quantidade,
       };
     } else if (field === "quantidade") {
       updated[index] = {
@@ -146,9 +185,10 @@ export function OrdersPage() {
       const client = clients.find((c) => c.id === form.clienteId);
       const orderData = {
         ...form,
-        clienteNome: client?.nome || "",
+        clienteNome: cName(client) || "",
         itens: orderItems,
         total: orderItems.reduce((s, i) => s + i.subtotal, 0),
+        paymentStatus: form.status === "pago" ? "paid" : "pending",
       };
       await addOrder(orderData as Record<string, unknown>);
       setModalOpen(false);
@@ -159,8 +199,8 @@ export function OrdersPage() {
     }
   };
 
-  const handleStatusChange = async (id: string, status: Order["status"]) => {
-    await editOrder(id, { status });
+  const handleStatusChange = async (id: string, status: string) => {
+    await editOrder(id, { status, paymentStatus: status === "pago" ? "paid" : "pending" });
   };
 
   return (
@@ -299,7 +339,9 @@ export function OrdersPage() {
       ) : (
         <motion.div variants={containerVariants} className="space-y-3">
           {sorted.map((order) => {
-            const status = statusConfig[order.status] || statusConfig.pendente;
+            const status = getStatus(order.status);
+            const tipo = getOrderType(order);
+            const cname = oClientName(order);
             return (
               <motion.div key={order.id} variants={itemVariants}>
                 <Card hover className="group">
@@ -308,12 +350,12 @@ export function OrdersPage() {
                       <div
                         className={cn(
                           "flex h-10 w-10 items-center justify-center rounded-xl",
-                          order.tipo === "entrada"
+                          tipo === "entrada"
                             ? "bg-success-light"
                             : "bg-danger-light"
                         )}
                       >
-                        {order.tipo === "entrada" ? (
+                        {tipo === "entrada" ? (
                           <ArrowUpRight className="h-5 w-5 text-success" />
                         ) : (
                           <ArrowDownRight className="h-5 w-5 text-danger" />
@@ -322,11 +364,11 @@ export function OrdersPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-foreground">
-                            {order.clienteNome || "Cliente"}
+                            {cname || "Cliente"}
                           </p>
                           <Badge variant={status.variant}>{status.label}</Badge>
-                          <Badge variant={order.tipo === "entrada" ? "success" : "danger"}>
-                            {order.tipo === "entrada" ? "Entrada" : "Saída"}
+                          <Badge variant={tipo === "entrada" ? "success" : "danger"}>
+                            {tipo === "entrada" ? "Entrada" : "Saída"}
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -339,7 +381,7 @@ export function OrdersPage() {
                       <span className="text-lg font-semibold text-foreground">
                         {formatCurrency(order.total || 0)}
                       </span>
-                      {order.status === "pendente" && (
+                      {(order.status === "pendente" || order.status === "pending") && (
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             size="sm"
@@ -385,7 +427,7 @@ export function OrdersPage() {
                 <option value="">Selecione um cliente</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.nome}
+                    {cName(c)}
                   </option>
                 ))}
               </select>
@@ -411,7 +453,7 @@ export function OrdersPage() {
               <select
                 value={form.status}
                 onChange={(e) =>
-                  setForm({ ...form, status: e.target.value as Order["status"] })
+                  setForm({ ...form, status: e.target.value })
                 }
                 className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
               >
@@ -447,7 +489,7 @@ export function OrdersPage() {
                     <option value="">Selecione</option>
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.nome} - {formatCurrency(p.preco)}
+                        {pName(p)} - {formatCurrency(pPrice(p))}
                       </option>
                     ))}
                   </select>
