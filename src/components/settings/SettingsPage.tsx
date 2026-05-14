@@ -5,6 +5,27 @@ import { Card, Button, Input, Skeleton } from "@/components/ui";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
 import { type StoreConfig } from "@/services/firebase";
 
+// Helper: safely convert any value to a string for form inputs.
+// Handles address objects like {street, number, neighborhood, city, zip, coordinates}
+function safeStr(val: any): string {
+  if (val == null) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (typeof val === "object") {
+    // For address objects
+    const parts = [val.street, val.number, val.neighborhood, val.city, val.zip, val.state, val.complement]
+      .filter((p: any) => p && typeof p !== "object");
+    if (parts.length > 0) return parts.join(", ");
+    // Fallback: join all non-object string/number values
+    const allParts = Object.values(val)
+      .filter((v: any) => v && (typeof v === "string" || typeof v === "number"))
+      .map(String);
+    if (allParts.length > 0) return allParts.join(", ");
+    return "";
+  }
+  return String(val);
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.08 } },
@@ -43,18 +64,18 @@ export function SettingsPage() {
     if (config) {
       console.log("[SettingsPage] Merging config into form:", config);
       setForm({
-        nomeLoja: config.nomeLoja || config.name || form.nomeLoja || "",
-        slogan: config.slogan || form.slogan || "",
-        logo: config.logo || form.logo || "",
-        telefone: config.telefone || config.phone || form.telefone || "",
-        email: config.email || form.email || "",
-        endereco: config.endereco || config.address || form.endereco || "",
-        cnpj: config.cnpj || form.cnpj || "",
-        horarioFuncionamento: config.horarioFuncionamento || form.horarioFuncionamento || "",
+        nomeLoja: safeStr(config.nomeLoja || config.name || form.nomeLoja),
+        slogan: safeStr(config.slogan || form.slogan),
+        logo: safeStr(config.logo || form.logo),
+        telefone: safeStr(config.telefone || config.phone || form.telefone),
+        email: safeStr(config.email || form.email),
+        endereco: safeStr(config.endereco || config.address || form.endereco),
+        cnpj: safeStr(config.cnpj || form.cnpj),
+        horarioFuncionamento: safeStr(config.horarioFuncionamento || form.horarioFuncionamento),
         redesSociais: {
-          instagram: config.redesSociais?.instagram || form.redesSociais?.instagram || "",
-          facebook: config.redesSociais?.facebook || form.redesSociais?.facebook || "",
-          whatsapp: config.redesSociais?.whatsapp || form.redesSociais?.whatsapp || "",
+          instagram: safeStr(config.redesSociais?.instagram || form.redesSociais?.instagram),
+          facebook: safeStr(config.redesSociais?.facebook || form.redesSociais?.facebook),
+          whatsapp: safeStr(config.redesSociais?.whatsapp || form.redesSociais?.whatsapp),
         },
       });
     }
