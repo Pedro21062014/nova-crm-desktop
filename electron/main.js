@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session } = require("electron");
+const { app, BrowserWindow, session, protocol } = require("electron");
 const path = require("path");
 
 // Disable GPU acceleration for environments without display
@@ -26,6 +26,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
       webSecurity: true,
+      webviewTag: true, // Required for WhatsApp Web embed
     },
   });
 
@@ -48,6 +49,11 @@ function createWindow() {
     }
   });
 
+  // Set User-Agent for webviews (WhatsApp compatibility)
+  mainWindow.webContents.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+  );
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -59,6 +65,11 @@ app.whenReady().then(() => {
   // Grant storage access for Firebase Auth in Electron
   // This allows Firebase Auth to store/retrieve auth tokens
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    callback({ requestHeaders: details.requestHeaders });
+  });
+
+  // Allow webview to load WhatsApp Web properly
+  session.fromPartition("persist:whatsapp").webRequest.onBeforeSendHeaders((details, callback) => {
     callback({ requestHeaders: details.requestHeaders });
   });
 

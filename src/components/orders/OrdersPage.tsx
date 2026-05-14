@@ -9,6 +9,9 @@ import {
   DollarSign,
   Trash2,
   ShoppingCart,
+  AlertCircle,
+  X,
+  Sparkles,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
@@ -73,7 +76,15 @@ const emptyOrder: OrderForm = {
 };
 
 export function OrdersPage() {
-  const { items: orders, loading: ordersLoading, addItem: addOrder, editItem: editOrder, deleteItem: deleteOrder } = useOrders();
+  const {
+    items: orders,
+    loading: ordersLoading,
+    error: ordersError,
+    addItem: addOrder,
+    editItem: editOrder,
+    deleteItem: deleteOrder,
+    clearError,
+  } = useOrders();
   const { items: clients } = useClients();
   const { items: products } = useProducts();
 
@@ -87,6 +98,7 @@ export function OrdersPage() {
   const [form, setForm] = useState<OrderForm>(emptyOrder);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const getStatus = (status: string) => {
     return statusConfig[status] || statusConfig.pendente;
@@ -107,6 +119,11 @@ export function OrdersPage() {
       saldo: entradas - saidas,
       pendentes: orders.filter((o) => o.status === "pendente" || o.status === "pending" || !o.status).length,
     };
+  }, [orders]);
+
+  // Count new orders (created within last hour)
+  const newOrdersCount = useMemo(() => {
+    return orders.filter((o) => o.isNew).length;
   }, [orders]);
 
   const filtered = orders.filter((o) => {
@@ -130,6 +147,7 @@ export function OrdersPage() {
   const openCreate = () => {
     setForm(emptyOrder);
     setOrderItems([]);
+    setActionError(null);
     setModalOpen(true);
   };
 
@@ -172,6 +190,7 @@ export function OrdersPage() {
 
   const handleSave = async () => {
     setSaving(true);
+    setActionError(null);
     try {
       const client = clients.find((c) => c.id === form.clienteId);
       const orderData = {
@@ -183,8 +202,9 @@ export function OrdersPage() {
       };
       await addOrder(orderData as Record<string, unknown>);
       setModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao criar pedido:", err);
+      setActionError(err.message || "Erro ao criar pedido. Tente novamente.");
     } finally {
       setSaving(false);
     }
@@ -193,12 +213,19 @@ export function OrdersPage() {
   const handleStatusChange = async () => {
     if (!selectedOrderId) return;
     setSaving(true);
+    setActionError(null);
     try {
-      await editOrder(selectedOrderId, { status: newStatus, paymentStatus: newStatus === "pago" ? "paid" : "pending" });
+      console.log(`[OrdersPage] Changing status of ${selectedOrderId} to ${newStatus}`);
+      await editOrder(selectedOrderId, {
+        status: newStatus,
+        paymentStatus: newStatus === "pago" ? "paid" : "pending",
+      });
+      console.log(`[OrdersPage] Status changed successfully`);
       setStatusModalOpen(false);
       setSelectedOrderId(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao alterar status:", err);
+      setActionError(err.message || "Erro ao alterar status. Tente novamente.");
     } finally {
       setSaving(false);
     }
@@ -207,12 +234,20 @@ export function OrdersPage() {
   const openStatusModal = (orderId: string, currentStatus: string) => {
     setSelectedOrderId(orderId);
     setNewStatus(currentStatus || "pendente");
+    setActionError(null);
     setStatusModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir este pedido?")) {
-      await deleteOrder(id);
+      setActionError(null);
+      try {
+        await deleteOrder(id);
+        console.log(`[OrdersPage] Order deleted successfully: ${id}`);
+      } catch (err: any) {
+        console.error("Erro ao excluir pedido:", err);
+        setActionError(err.message || "Erro ao excluir pedido. Tente novamente.");
+      }
     }
   };
 
@@ -226,7 +261,19 @@ export function OrdersPage() {
       {/* Header */}
       <motion.div variants={itemVariants} className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Pedidos</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-3">
+            Pedidos
+            {newOrdersCount > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-white"
+              >
+                <Sparkles className="h-3 w-3" />
+                {newOrdersCount} {newOrdersCount === 1 ? "novo" : "novos"}
+              </motion.span>
+            )}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Gestão de vendas e fluxo de caixa
           </p>
@@ -235,6 +282,24 @@ export function OrdersPage() {
           Novo Pedido
         </Button>
       </motion.div>
+
+      {/* Error Banner */}
+      {(actionError || ordersError) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 rounded-xl bg-danger-light border border-danger/20 px-4 py-3"
+        >
+          <AlertCircle className="h-4 w-4 text-danger shrink-0" />
+          <p className="text-sm text-danger flex-1">{actionError || ordersError}</p>
+          <button
+            onClick={() => { setActionError(null); clearError(); }}
+            className="text-danger/60 hover:text-danger transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </motion.div>
+      )}
 
       {/* Summary Cards */}
       <motion.div variants={itemVariants} className="grid grid-cols-4 gap-5">
@@ -348,9 +413,20 @@ export function OrdersPage() {
             const status = getStatus(order.status);
             const tipo = getOrderType(order);
             const cname = oClientName(order);
+            const isNew = order.isNew;
             return (
               <motion.div key={order.id} variants={itemVariants}>
-                <Card hover className="group">
+                <Card
+                  hover
+                  className={cn(
+                    "group relative overflow-hidden",
+                    isNew && "ring-2 ring-accent/30 bg-accent-light/30"
+                  )}
+                >
+                  {/* New indicator strip */}
+                  {isNew && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent rounded-l-2xl" />
+                  )}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div
@@ -374,6 +450,15 @@ export function OrdersPage() {
                           <Badge variant={tipo === "entrada" ? "success" : "danger"}>
                             {tipo === "entrada" ? "Entrada" : "Saída"}
                           </Badge>
+                          {isNew && (
+                            <motion.span
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="inline-flex items-center gap-1 rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white uppercase tracking-wider"
+                            >
+                              Novo
+                            </motion.span>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {order.createdAt ? formatDate(order.createdAt) : "Agora"}
@@ -385,7 +470,7 @@ export function OrdersPage() {
                       <span className="text-lg font-semibold text-foreground">
                         {formatCurrency(order.total || 0)}
                       </span>
-                      {/* Status change button — ALWAYS visible */}
+                      {/* Status change button */}
                       <Button
                         size="sm"
                         variant="secondary"
@@ -393,7 +478,7 @@ export function OrdersPage() {
                       >
                         Alterar Status
                       </Button>
-                      {/* Delete button — ALWAYS visible */}
+                      {/* Delete button */}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -417,6 +502,12 @@ export function OrdersPage() {
         size="lg"
       >
         <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+          {actionError && (
+            <div className="flex items-center gap-2 rounded-xl bg-danger-light px-3 py-2 text-sm text-danger">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {actionError}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-foreground/80">Cliente</label>
@@ -528,6 +619,12 @@ export function OrdersPage() {
         size="sm"
       >
         <div className="space-y-4">
+          {actionError && (
+            <div className="flex items-center gap-2 rounded-xl bg-danger-light px-3 py-2 text-sm text-danger">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {actionError}
+            </div>
+          )}
           <div>
             <label className="text-sm font-medium text-foreground/80">Novo Status</label>
             <select

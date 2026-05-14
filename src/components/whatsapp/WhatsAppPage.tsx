@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageCircle,
@@ -9,10 +9,15 @@ import {
   Edit2,
   Calendar,
   Repeat,
-  ExternalLink,
   CheckCircle2,
   AlertCircle,
   XCircle,
+  AlertCircle as ErrorIcon,
+  X,
+  ExternalLink,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useScheduledMessages } from "@/hooks/useFirebaseData";
@@ -51,13 +56,20 @@ const emptyForm: Omit<ScheduledMessage, "createdAt" | "updatedAt"> = {
   status: "agendada",
 };
 
+type Tab = "whatsapp" | "mensagens";
+
 export function WhatsAppPage() {
-  const { items: messages, loading, addItem, editItem, deleteItem } = useScheduledMessages();
+  const { items: messages, loading, addItem, editItem, deleteItem, error: msgError, clearError } = useScheduledMessages();
+  const [activeTab, setActiveTab] = useState<Tab>("whatsapp");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<"todas" | "agendada" | "enviada" | "falhou">("todas");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isWhatsappLoaded, setIsWhatsappLoaded] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const webviewRef = useRef<any>(null);
 
   const filtered = messages.filter((m) => {
     if (filter === "todas") return true;
@@ -69,6 +81,7 @@ export function WhatsAppPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(emptyForm);
+    setActionError(null);
     setModalOpen(true);
   };
 
@@ -82,11 +95,13 @@ export function WhatsAppPage() {
       recorrencia: msg.recorrencia || "unica",
       status: msg.status || "agendada",
     });
+    setActionError(null);
     setModalOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setActionError(null);
     try {
       if (editingId) {
         await editItem(editingId, form as Partial<Record<string, unknown>>);
@@ -94,8 +109,9 @@ export function WhatsAppPage() {
         await addItem(form as Record<string, unknown>);
       }
       setModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar mensagem:", err);
+      setActionError(err.message || "Erro ao salvar mensagem.");
     } finally {
       setSaving(false);
     }
@@ -103,14 +119,32 @@ export function WhatsAppPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir esta mensagem?")) {
-      await deleteItem(id);
+      setActionError(null);
+      try {
+        await deleteItem(id);
+      } catch (err: any) {
+        setActionError(err.message || "Erro ao excluir mensagem.");
+      }
     }
   };
 
-  const openWhatsApp = (destinatario: string, mensagem: string) => {
+  const sendToWhatsApp = (destinatario: string, mensagem: string) => {
     const phone = destinatario.replace(/\D/g, "");
     const text = encodeURIComponent(mensagem);
-    window.open(`https://web.whatsapp.com/send?phone=${phone}&text=${text}`, "_blank");
+    // Open in the embedded webview if on WhatsApp tab, otherwise open externally
+    if (webviewRef.current && activeTab === "whatsapp") {
+      const webview = webviewRef.current;
+      webview.loadURL(`https://web.whatsapp.com/send?phone=${phone}&text=${text}`);
+    } else {
+      window.open(`https://web.whatsapp.com/send?phone=${phone}&text=${text}`, "_blank");
+    }
+  };
+
+  const reloadWhatsApp = () => {
+    if (webviewRef.current) {
+      webviewRef.current.loadURL("https://web.whatsapp.com");
+      setIsWhatsappLoaded(false);
+    }
   };
 
   const stats = {
@@ -123,7 +157,9 @@ export function WhatsAppPage() {
   const dateToInputValue = (ms: number) => {
     if (!ms) return "";
     const d = new Date(ms);
-    return d.toISOString().slice(0, 16);
+    // Format for datetime-local input in local timezone
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
   const inputValueToDate = (val: string) => {
@@ -136,177 +172,305 @@ export function WhatsAppPage() {
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="p-8 space-y-6"
+      className={cn(
+        "flex flex-col",
+        isFullscreen && activeTab === "whatsapp" ? "h-screen -m-8" : "p-8 space-y-6"
+      )}
     >
-      {/* Header */}
-      <motion.div variants={itemVariants} className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
-            <MessageCircle className="h-6 w-6 text-green-500" />
-            WhatsApp
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Mensagens programadas e integração com WhatsApp Web
-          </p>
+      {/* Header - hidden in fullscreen */}
+      {!(isFullscreen && activeTab === "whatsapp") && (
+        <>
+          <motion.div variants={itemVariants} className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
+                <MessageCircle className="h-6 w-6 text-green-500" />
+                WhatsApp
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                WhatsApp Web e mensagens programadas
+              </p>
+            </div>
+            <Button
+              icon={<Plus className="h-4 w-4" />}
+              onClick={openCreate}
+            >
+              Nova Mensagem
+            </Button>
+          </motion.div>
+
+          {/* Tab Switcher */}
+          <motion.div variants={itemVariants} className="flex items-center gap-1 bg-muted rounded-xl p-1 w-fit">
+            <button
+              onClick={() => setActiveTab("whatsapp")}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200",
+                activeTab === "whatsapp"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              WhatsApp Web
+            </button>
+            <button
+              onClick={() => setActiveTab("mensagens")}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200",
+                activeTab === "mensagens"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Mensagens Programadas
+              {stats.agendadas > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                  {stats.agendadas}
+                </span>
+              )}
+            </button>
+          </motion.div>
+        </>
+      )}
+
+      {/* Fullscreen toggle bar */}
+      {isFullscreen && activeTab === "whatsapp" && (
+        <div className="flex items-center justify-between bg-card border-b border-border px-4 py-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-green-500" />
+            <span className="text-sm font-medium text-foreground">WhatsApp Web</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={reloadWhatsApp}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Recarregar"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Sair da tela cheia"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
-          Nova Mensagem
-        </Button>
-      </motion.div>
+      )}
 
-      {/* Stats */}
-      <motion.div variants={itemVariants} className="grid grid-cols-3 gap-5">
-        <Card>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-light">
-              <Clock className="h-5 w-5 text-warning" />
+      {/* WhatsApp Web Tab */}
+      {activeTab === "whatsapp" && (
+        <motion.div
+          variants={itemVariants}
+          className={cn(
+            "flex flex-col",
+            isFullscreen ? "flex-1" : ""
+          )}
+        >
+          {!isFullscreen && (
+            <div className="flex items-center justify-end gap-2 mb-3">
+              <button
+                onClick={reloadWhatsApp}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                title="Recarregar WhatsApp"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setIsFullscreen(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                title="Tela cheia"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Agendadas</p>
-              <p className="text-lg font-semibold text-warning">{stats.agendadas}</p>
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success-light">
-              <CheckCircle2 className="h-5 w-5 text-success" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Enviadas</p>
-              <p className="text-lg font-semibold text-success">{stats.enviadas}</p>
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-danger-light">
-              <AlertCircle className="h-5 w-5 text-danger" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Falhas</p>
-              <p className="text-lg font-semibold text-danger">{stats.falhas}</p>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
+          )}
 
-      {/* Filter tabs */}
-      <motion.div variants={itemVariants} className="flex items-center gap-1.5">
-        {(["todas", "agendada", "enviada", "falhou"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
+          {/* WebView Container */}
+          <div
             className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-              filter === f ? "bg-accent text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+              "rounded-xl border border-border overflow-hidden bg-muted",
+              isFullscreen ? "flex-1" : "h-[calc(100vh-320px)] min-h-[400px]"
             )}
           >
-            {f === "todas" ? "Todas" : f === "agendada" ? "Agendadas" : f === "enviada" ? "Enviadas" : "Falhas"}
-          </button>
-        ))}
-      </motion.div>
+            {/* @ts-ignore - webview is not in React types but works in Electron */}
+            <webview
+              ref={webviewRef}
+              src="https://web.whatsapp.com"
+              className="w-full h-full"
+              partition="persist:whatsapp"
+              useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+              allowpopups={true as any}
+              onLoad={() => setIsWhatsappLoaded(true)}
+            />
+          </div>
 
-      {/* Messages List */}
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : sorted.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <MessageCircle className="h-12 w-12 text-muted-foreground/30" />
-          <p className="mt-4 text-sm text-muted-foreground">Nenhuma mensagem programada</p>
-          <Button variant="secondary" className="mt-4" onClick={openCreate}>
-            Criar primeira mensagem
-          </Button>
-        </div>
-      ) : (
-        <motion.div variants={containerVariants} className="space-y-3">
-          {sorted.map((msg) => {
-            const recorrencia = recorrenciaConfig[msg.recorrencia] || recorrenciaConfig.unica;
-            const stIcon = statusIcon[msg.status] || statusIcon.agendada;
-            const StatusIcon = stIcon.icon;
-            return (
-              <motion.div key={msg.id} variants={itemVariants}>
-                <Card hover className="group">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                        msg.status === "enviada" ? "bg-success-light" :
-                        msg.status === "falhou" ? "bg-danger-light" : "bg-warning-light"
-                      )}>
-                        <StatusIcon className={cn("h-5 w-5", stIcon.color)} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-foreground">{msg.titulo || "Sem título"}</p>
-                          <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium", recorrencia.color)}>
-                            <Repeat className="h-3 w-3 mr-1" />
-                            {recorrencia.label}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{msg.mensagem}</p>
-                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {msg.dataHora ? formatDate(msg.dataHora) : "Sem data"}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <MessageCircle className="h-3 w-3" />
-                            {msg.destinatario || "Sem destinatário"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        icon={<Send className="h-3.5 w-3.5" />}
-                        onClick={() => openWhatsApp(msg.destinatario, msg.mensagem)}
-                      >
-                        Enviar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon={<Edit2 className="h-3.5 w-3.5" />}
-                        onClick={() => openEdit(msg as ScheduledMessage & { id: string })}
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon={<Trash2 className="h-3.5 w-3.5" />}
-                        onClick={() => handleDelete(msg.id)}
-                      />
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-            );
-          })}
+          {!isFullscreen && (
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Escaneie o QR Code com seu WhatsApp para conectar. Sua sessão será mantida.
+            </p>
+          )}
         </motion.div>
       )}
 
-      {/* Info Banner */}
-      <motion.div variants={itemVariants}>
-        <Card className="bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800">
-          <div className="flex items-start gap-3">
-            <MessageCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-green-800 dark:text-green-300">Como funciona</p>
-              <p className="text-xs text-green-700 dark:text-green-400 mt-1 leading-relaxed">
-                Programe suas mensagens e envie pelo WhatsApp Web com um clique. Defina a data, hora e recorrência.
-                Ao clicar em "Enviar", o WhatsApp Web será aberto com a mensagem pronta para envio.
-                Você pode agendar lembretes, mensagens de cobrança, promoções e muito mais.
-              </p>
+      {/* Messages Tab */}
+      {activeTab === "mensagens" && (
+        <>
+          {/* Error Banner */}
+          {(actionError || msgError) && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 rounded-xl bg-danger-light border border-danger/20 px-4 py-3"
+            >
+              <ErrorIcon className="h-4 w-4 text-danger shrink-0" />
+              <p className="text-sm text-danger flex-1">{actionError || msgError}</p>
+              <button
+                onClick={() => { setActionError(null); clearError(); }}
+                className="text-danger/60 hover:text-danger transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </motion.div>
+          )}
+
+          {/* Stats */}
+          <motion.div variants={itemVariants} className="grid grid-cols-3 gap-5">
+            <Card>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-light">
+                  <Clock className="h-5 w-5 text-warning" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Agendadas</p>
+                  <p className="text-lg font-semibold text-warning">{stats.agendadas}</p>
+                </div>
+              </div>
+            </Card>
+            <Card>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success-light">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Enviadas</p>
+                  <p className="text-lg font-semibold text-success">{stats.enviadas}</p>
+                </div>
+              </div>
+            </Card>
+            <Card>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-danger-light">
+                  <AlertCircle className="h-5 w-5 text-danger" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Falhas</p>
+                  <p className="text-lg font-semibold text-danger">{stats.falhas}</p>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+
+          {/* Filter tabs */}
+          <motion.div variants={itemVariants} className="flex items-center gap-1.5">
+            {(["todas", "agendada", "enviada", "falhou"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors capitalize",
+                  filter === f ? "bg-accent text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {f === "todas" ? "Todas" : f === "agendada" ? "Agendadas" : f === "enviada" ? "Enviadas" : "Falhas"}
+              </button>
+            ))}
+          </motion.div>
+
+          {/* Messages List */}
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-28 w-full rounded-xl" />
+              ))}
             </div>
-          </div>
-        </Card>
-      </motion.div>
+          ) : sorted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <MessageCircle className="h-12 w-12 text-muted-foreground/30" />
+              <p className="mt-4 text-sm text-muted-foreground">Nenhuma mensagem programada</p>
+              <Button variant="secondary" className="mt-4" onClick={openCreate}>
+                Criar primeira mensagem
+              </Button>
+            </div>
+          ) : (
+            <motion.div variants={containerVariants} className="space-y-3">
+              {sorted.map((msg) => {
+                const recorrencia = recorrenciaConfig[msg.recorrencia] || recorrenciaConfig.unica;
+                const stIcon = statusIcon[msg.status] || statusIcon.agendada;
+                const StatusIcon = stIcon.icon;
+                return (
+                  <motion.div key={msg.id} variants={itemVariants}>
+                    <Card hover className="group">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className={cn(
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                            msg.status === "enviada" ? "bg-success-light" :
+                            msg.status === "falhou" ? "bg-danger-light" : "bg-warning-light"
+                          )}>
+                            <StatusIcon className={cn("h-5 w-5", stIcon.color)} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-semibold text-foreground">{msg.titulo || "Sem título"}</p>
+                              <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium", recorrencia.color)}>
+                                <Repeat className="h-3 w-3 mr-1" />
+                                {recorrencia.label}
+                              </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{msg.mensagem}</p>
+                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {msg.dataHora ? formatDate(msg.dataHora) : "Sem data"}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <MessageCircle className="h-3 w-3" />
+                                {msg.destinatario || "Sem destinatário"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={<Send className="h-3.5 w-3.5" />}
+                            onClick={() => sendToWhatsApp(msg.destinatario, msg.mensagem)}
+                          >
+                            Enviar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<Edit2 className="h-3.5 w-3.5" />}
+                            onClick={() => openEdit(msg as ScheduledMessage & { id: string })}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<Trash2 className="h-3.5 w-3.5" />}
+                            onClick={() => handleDelete(msg.id)}
+                          />
+                        </div>
+                      </div>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          )}
+        </>
+      )}
 
       {/* Create/Edit Modal */}
       <Modal
@@ -316,6 +480,12 @@ export function WhatsAppPage() {
         size="lg"
       >
         <div className="space-y-4">
+          {actionError && (
+            <div className="flex items-center gap-2 rounded-xl bg-danger-light px-3 py-2 text-sm text-danger">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {actionError}
+            </div>
+          )}
           <Input
             label="Título"
             value={form.titulo}

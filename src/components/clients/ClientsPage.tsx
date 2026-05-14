@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -10,6 +10,8 @@ import {
   Edit2,
   Trash2,
   FileText,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useClients } from "@/hooks/useFirebaseData";
@@ -34,29 +36,38 @@ const emptyClient: Omit<Client, "createdAt" | "updatedAt"> = {
 };
 
 export function ClientsPage() {
-  const { items: clients, loading, addItem, editItem, deleteItem } = useClients();
+  const { items: clients, loading, addItem, editItem, deleteItem, error: clientsError, clearError } = useClients();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyClient);
   const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const filtered = clients.filter((c) =>
-    cName(c)?.toLowerCase().includes(search.toLowerCase()) ||
-    cEmail(c)?.toLowerCase().includes(search.toLowerCase()) ||
-    cPhone(c)?.includes(search)
+  const filtered = useMemo(() =>
+    clients.filter((c) =>
+      cName(c)?.toLowerCase().includes(search.toLowerCase()) ||
+      cEmail(c)?.toLowerCase().includes(search.toLowerCase()) ||
+      cPhone(c)?.includes(search)
+    ),
+    [clients, search]
   );
 
-  const selectedClient = clients.find((c) => c.id === selectedId);
+  // Memoize selectedClient to prevent unnecessary re-renders/freezes
+  const selectedClient = useMemo(() =>
+    clients.find((c) => c.id === selectedId) || null,
+    [clients, selectedId]
+  );
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditingId(null);
     setForm(emptyClient);
+    setActionError(null);
     setModalOpen(true);
-  };
+  }, []);
 
-  const openEdit = (client: Client & { id: string }) => {
+  const openEdit = useCallback((client: Client & { id: string }) => {
     setEditingId(client.id);
     setForm({
       nome: cName(client),
@@ -66,11 +77,13 @@ export function ClientsPage() {
       cpfCnpj: cDoc(client),
       observacoes: cNotes(client),
     });
+    setActionError(null);
     setModalOpen(true);
-  };
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
+    setActionError(null);
     try {
       if (editingId) {
         await editItem(editingId, form as unknown as Partial<Record<string, unknown>>);
@@ -78,8 +91,9 @@ export function ClientsPage() {
         await addItem(form as Record<string, unknown>);
       }
       setModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar cliente:", err);
+      setActionError(err.message || "Erro ao salvar cliente.");
     } finally {
       setSaving(false);
     }
@@ -87,19 +101,30 @@ export function ClientsPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir este cliente?")) {
-      await deleteItem(id);
-      if (selectedId === id) setSelectedId(null);
+      setActionError(null);
+      try {
+        await deleteItem(id);
+        if (selectedId === id) setSelectedId(null);
+      } catch (err: any) {
+        console.error("Erro ao excluir cliente:", err);
+        setActionError(err.message || "Erro ao excluir cliente.");
+      }
     }
   };
+
+  const handleSelectClient = useCallback((id: string) => {
+    setSelectedId(id);
+  }, []);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
       className="flex h-full"
     >
       {/* Left Panel - Client List */}
-      <div className="w-80 border-r border-border flex flex-col">
+      <div className="w-80 border-r border-border flex flex-col shrink-0">
         <div className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold text-foreground">Clientes</h1>
@@ -138,9 +163,9 @@ export function ClientsPage() {
                 return (
                   <button
                     key={client.id}
-                    onClick={() => setSelectedId(client.id)}
+                    onClick={() => handleSelectClient(client.id)}
                     className={cn(
-                      "w-full text-left rounded-xl p-3 transition-colors",
+                      "w-full text-left rounded-xl p-3 transition-all duration-200",
                       selectedId === client.id
                         ? "bg-accent-light border border-accent/20"
                         : "hover:bg-muted"
@@ -176,6 +201,24 @@ export function ClientsPage() {
 
       {/* Right Panel - Client Detail */}
       <div className="flex-1 p-8 overflow-y-auto">
+        {/* Error Banner */}
+        {(actionError || clientsError) && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 rounded-xl bg-danger-light border border-danger/20 px-4 py-3 mb-6"
+          >
+            <AlertCircle className="h-4 w-4 text-danger shrink-0" />
+            <p className="text-sm text-danger flex-1">{actionError || clientsError}</p>
+            <button
+              onClick={() => { setActionError(null); clearError(); }}
+              className="text-danger/60 hover:text-danger transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
+
         <AnimatePresence mode="wait">
           {selectedClient ? (
             <motion.div
@@ -183,7 +226,7 @@ export function ClientsPage() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
               className="space-y-6"
             >
               {/* Header */}
@@ -311,6 +354,12 @@ export function ClientsPage() {
         size="lg"
       >
         <div className="space-y-4">
+          {actionError && (
+            <div className="flex items-center gap-2 rounded-xl bg-danger-light px-3 py-2 text-sm text-danger">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {actionError}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Nome"

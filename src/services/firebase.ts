@@ -36,7 +36,14 @@ export function getMerchantId(): string | null {
 }
 
 function merchantPath(): string {
-  if (!_merchantId) throw new Error("Usuário não autenticado");
+  if (!_merchantId) {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      _merchantId = currentUser.uid;
+    } else {
+      throw new Error("Usuário não autenticado. Faça login novamente.");
+    }
+  }
   return `merchants/${_merchantId}`;
 }
 
@@ -63,26 +70,46 @@ export async function create<T extends Record<string, unknown>>(
   subcollection: string,
   data: T
 ): Promise<string> {
-  const colRef = collection(db, merchantPath(), subcollection);
-  const docRef = await addDoc(colRef, {
-    ...data,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  });
-  return docRef.id;
+  try {
+    const path = merchantPath();
+    console.log(`[Firestore] Creating doc in ${path}/${subcollection}`);
+    const colRef = collection(db, path, subcollection);
+    const docRef = await addDoc(colRef, {
+      ...data,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+    console.log(`[Firestore] Document created with ID: ${docRef.id}`);
+    return docRef.id;
+  } catch (err: any) {
+    console.error(`[Firestore] Error creating document in ${subcollection}:`, err);
+    if (err.code === "permission-denied") {
+      throw new Error("Permissão negada. Verifique as regras do Firestore.");
+    }
+    throw new Error(`Erro ao criar documento: ${err.message || err}`);
+  }
 }
 
 export async function createWithId<T extends Record<string, unknown>>(
-  subcollection: string,
+  collectionPath: string,
   id: string,
   data: T
 ): Promise<void> {
-  const docRef = doc(db, merchantPath(), subcollection, id);
-  await setDoc(docRef, {
-    ...data,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  });
+  const docRef = doc(db, collectionPath, id);
+  const existing = await getDoc(docRef);
+  if (existing.exists()) {
+    // Merge: update existing document, don't overwrite createdAt
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: Timestamp.now(),
+    } as Record<string, unknown>);
+  } else {
+    await setDoc(docRef, {
+      ...data,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+  }
 }
 
 export async function updateItem<T extends Record<string, unknown>>(
@@ -90,16 +117,41 @@ export async function updateItem<T extends Record<string, unknown>>(
   id: string,
   data: Partial<T>
 ): Promise<void> {
-  const docRef = doc(db, merchantPath(), subcollection, id);
-  await updateDoc(docRef, {
-    ...data,
-    updatedAt: Timestamp.now(),
-  });
+  try {
+    const path = merchantPath();
+    console.log(`[Firestore] Updating doc ${path}/${subcollection}/${id}`, data);
+    const docRef = doc(db, path, subcollection, id);
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: Timestamp.now(),
+    } as Record<string, unknown>);
+    console.log(`[Firestore] Document updated successfully: ${id}`);
+  } catch (err: any) {
+    console.error(`[Firestore] Error updating document ${subcollection}/${id}:`, err);
+    if (err.code === "permission-denied") {
+      throw new Error("Permissão negada ao atualizar. Verifique as regras do Firestore.");
+    }
+    if (err.code === "not-found") {
+      throw new Error("Documento não encontrado. Pode ter sido removido.");
+    }
+    throw new Error(`Erro ao atualizar: ${err.message || err}`);
+  }
 }
 
 export async function removeItem(subcollection: string, id: string): Promise<void> {
-  const docRef = doc(db, merchantPath(), subcollection, id);
-  await deleteDoc(docRef);
+  try {
+    const path = merchantPath();
+    console.log(`[Firestore] Deleting doc ${path}/${subcollection}/${id}`);
+    const docRef = doc(db, path, subcollection, id);
+    await deleteDoc(docRef);
+    console.log(`[Firestore] Document deleted successfully: ${id}`);
+  } catch (err: any) {
+    console.error(`[Firestore] Error deleting document ${subcollection}/${id}:`, err);
+    if (err.code === "permission-denied") {
+      throw new Error("Permissão negada ao excluir. Verifique as regras do Firestore.");
+    }
+    throw new Error(`Erro ao excluir: ${err.message || err}`);
+  }
 }
 
 export function subscribe<T>(
@@ -107,25 +159,34 @@ export function subscribe<T>(
   callback: (data: Record<string, T> | null) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const colRef = collection(db, merchantPath(), subcollection);
-  // No orderBy — avoids missing docs that don't have createdAt field yet
-  // Sorting is done client-side
-  const q = query(colRef);
+  try {
+    const path = merchantPath();
+    console.log(`[Firestore] Subscribing to ${path}/${subcollection}`);
+    const colRef = collection(db, path, subcollection);
+    // No orderBy — avoids missing docs that don't have createdAt field yet
+    // Sorting is done client-side
+    const q = query(colRef);
 
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const result: Record<string, T> = {};
-      snapshot.forEach((doc) => {
-        result[doc.id] = doc.data() as T;
-      });
-      callback(Object.keys(result).length > 0 ? result : null);
-    },
-    (error) => {
-      console.error(`[Firestore] Error subscribing to ${subcollection}:`, error);
-      if (onError) onError(error);
-    }
-  );
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const result: Record<string, T> = {};
+        snapshot.forEach((doc) => {
+          result[doc.id] = doc.data() as T;
+        });
+        callback(Object.keys(result).length > 0 ? result : null);
+      },
+      (error) => {
+        console.error(`[Firestore] Error subscribing to ${subcollection}:`, error);
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    console.error(`[Firestore] Error setting up subscription for ${subcollection}:`, err);
+    if (onError) onError(err instanceof Error ? err : new Error(String(err)));
+    // Return a no-op unsubscribe
+    return () => {};
+  }
 }
 
 // Subscribe to a single document
@@ -156,30 +217,48 @@ export function subscribeDoc<T>(
 // ── Merchant Document Helpers ──
 
 export async function getMerchantData<T>(): Promise<T | null> {
+  if (!_merchantId) return null;
   const docRef = doc(db, `merchants/${_merchantId}`);
   const snapshot = await getDoc(docRef);
   return snapshot.exists() ? (snapshot.data() as T) : null;
 }
 
 export async function updateMerchantData<T>(data: Partial<T>): Promise<void> {
+  if (!_merchantId) throw new Error("Usuário não autenticado");
   const docRef = doc(db, `merchants/${_merchantId}`);
-  await updateDoc(docRef, {
-    ...data,
-    updatedAt: Timestamp.now(),
-  } as Record<string, unknown>);
+  try {
+    // Use set with merge to create or update
+    await setDoc(docRef, {
+      ...data,
+      updatedAt: Timestamp.now(),
+    } as Record<string, unknown>, { merge: true });
+    console.log(`[Firestore] Merchant data updated successfully`);
+  } catch (err: any) {
+    console.error(`[Firestore] Error updating merchant data:`, err);
+    if (err.code === "permission-denied") {
+      throw new Error("Permissão negada ao salvar configurações.");
+    }
+    throw new Error(`Erro ao salvar: ${err.message || err}`);
+  }
 }
 
 export function subscribeMerchant<T>(
   callback: (data: T | null) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
+  if (!_merchantId) {
+    console.warn("[Firestore] Cannot subscribe to merchant: no merchant ID");
+    if (onError) onError(new Error("Usuário não autenticado"));
+    return () => {};
+  }
+
   const docRef = doc(db, `merchants/${_merchantId}`);
 
   return onSnapshot(
     docRef,
     (snapshot: DocumentSnapshot<DocumentData>) => {
       if (snapshot.exists()) {
-        callback({ id: snapshot.id, ...snapshot.data() } as T);
+        callback({ ...snapshot.data() } as T);
       } else {
         callback(null);
       }
@@ -234,6 +313,7 @@ export interface Order {
   formaPagamento?: string;
   observacoes?: string;
   paymentStatus?: string;
+  isNew?: boolean;
   createdAt?: Timestamp | number;
   updatedAt?: Timestamp | number;
 }
@@ -265,6 +345,7 @@ export interface StoreConfig {
   };
   isSuperuser?: boolean;
   isBlocked?: boolean;
+  createdAt?: Timestamp | number;
   updatedAt?: Timestamp | number;
 }
 
@@ -297,5 +378,9 @@ export function toMs(ts: Timestamp | number | undefined): number {
   if (!ts) return 0;
   if (typeof ts === "number") return ts;
   if (ts instanceof Timestamp) return ts.toMillis();
+  // Handle plain objects that look like Timestamps (from Firestore snapshots)
+  if (typeof ts === "object" && "seconds" in ts && "nanoseconds" in ts) {
+    return (ts as any).seconds * 1000 + (ts as any).nanoseconds / 1000000;
+  }
   return 0;
 }

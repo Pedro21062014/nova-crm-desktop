@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Store, Save, Globe, Phone, Mail, Clock, Camera, Globe2, MessageCircle } from "lucide-react";
+import { Store, Save, Globe, Phone, Mail, Clock, Camera, Globe2, MessageCircle, AlertCircle, X, CheckCircle2 } from "lucide-react";
 import { Card, Button, Input, Skeleton } from "@/components/ui";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
 import { type StoreConfig } from "@/services/firebase";
@@ -32,23 +32,30 @@ const emptyConfig: StoreConfig = {
 };
 
 export function SettingsPage() {
-  const { config, loading, saveConfig } = useStoreConfig();
+  const { config, loading, error, saveConfig, clearError } = useStoreConfig();
   const [form, setForm] = useState<StoreConfig>(emptyConfig);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
+  // Merge config into form whenever it changes
   useEffect(() => {
     if (config) {
+      console.log("[SettingsPage] Merging config into form:", config);
       setForm({
-        nomeLoja: config.nomeLoja || config.name || "",
-        slogan: config.slogan || "",
-        logo: config.logo || "",
-        telefone: config.telefone || config.phone || "",
-        email: config.email || "",
-        endereco: config.endereco || config.address || "",
-        cnpj: config.cnpj || "",
-        horarioFuncionamento: config.horarioFuncionamento || "",
-        redesSociais: config.redesSociais || emptyConfig.redesSociais,
+        nomeLoja: config.nomeLoja || config.name || form.nomeLoja || "",
+        slogan: config.slogan || form.slogan || "",
+        logo: config.logo || form.logo || "",
+        telefone: config.telefone || config.phone || form.telefone || "",
+        email: config.email || form.email || "",
+        endereco: config.endereco || config.address || form.endereco || "",
+        cnpj: config.cnpj || form.cnpj || "",
+        horarioFuncionamento: config.horarioFuncionamento || form.horarioFuncionamento || "",
+        redesSociais: {
+          instagram: config.redesSociais?.instagram || form.redesSociais?.instagram || "",
+          facebook: config.redesSociais?.facebook || form.redesSociais?.facebook || "",
+          whatsapp: config.redesSociais?.whatsapp || form.redesSociais?.whatsapp || "",
+        },
       });
     }
   }, [config]);
@@ -56,12 +63,14 @@ export function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
+    setLocalError(null);
     try {
       await saveConfig(form);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar configurações:", err);
+      setLocalError(err.message || "Erro ao salvar configurações.");
     } finally {
       setSaving(false);
     }
@@ -84,14 +93,45 @@ export function SettingsPage() {
             Informações da sua loja
           </p>
         </div>
-        <Button
-          icon={<Save className="h-4 w-4" />}
-          onClick={handleSave}
-          loading={saving}
-        >
-          {saved ? "Salvo!" : "Salvar"}
-        </Button>
+        <div className="flex items-center gap-3">
+          {saved && (
+            <motion.span
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-1 text-sm text-success"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Salvo!
+            </motion.span>
+          )}
+          <Button
+            icon={<Save className="h-4 w-4" />}
+            onClick={handleSave}
+            loading={saving}
+          >
+            Salvar
+          </Button>
+        </div>
       </motion.div>
+
+      {/* Error Banner */}
+      {(localError || error) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 rounded-xl bg-danger-light border border-danger/20 px-4 py-3"
+        >
+          <AlertCircle className="h-4 w-4 text-danger shrink-0" />
+          <p className="text-sm text-danger flex-1">{localError || error}</p>
+          <button
+            onClick={() => { setLocalError(null); clearError(); }}
+            className="text-danger/60 hover:text-danger transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </motion.div>
+      )}
 
       {loading ? (
         <div className="space-y-6">

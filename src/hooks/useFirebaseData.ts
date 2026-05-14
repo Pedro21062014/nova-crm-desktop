@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  getAll,
-  subscribe,
+  subscribe as firebaseSubscribe,
   create as firebaseCreate,
   updateItem as firebaseUpdateItem,
   removeItem as firebaseRemoveItem,
   setMerchantId,
-  merchantExists,
+  getMerchantId,
   type Product,
   type Client,
   type Order,
@@ -48,16 +47,25 @@ export function useFirebaseList<T>(subcollection: string) {
 
         if (cancelled) return;
 
+        // Ensure merchant ID is set before subscribing
+        const mid = getMerchantId();
+        if (!mid) {
+          console.error("[useFirebaseList] No merchant ID available after setting it");
+          setError("Erro de autenticação. Tente fazer login novamente.");
+          setLoading(false);
+          return;
+        }
+
         // Clean up previous subscription
         if (unsubscribeRef.current) {
           unsubscribeRef.current();
           unsubscribeRef.current = null;
         }
 
-        console.log(`[Firestore] Subscribing to: merchants/${user.uid}/${subcollection}`);
+        console.log(`[Firestore] Subscribing to: merchants/${mid}/${subcollection}`);
 
         // Set up real-time listener
-        const unsubscribe = subscribe<T>(
+        const unsubscribe = firebaseSubscribe<T>(
           subcollection,
           (snapshot) => {
             if (!cancelled) {
@@ -69,7 +77,12 @@ export function useFirebaseList<T>(subcollection: string) {
           (err) => {
             if (!cancelled) {
               console.error(`[Firestore] Subscription error for ${subcollection}:`, err);
-              setError(`Erro de permissão ao acessar dados. Verifique as regras do Firestore.`);
+              const msg = err.message || "";
+              if (msg.includes("permission-denied") || msg.includes("Permissão")) {
+                setError("Permissão negada. Verifique as regras do Firestore.");
+              } else {
+                setError("Erro ao carregar dados. Verifique sua conexão.");
+              }
               setLoading(false);
             }
           }
@@ -98,38 +111,70 @@ export function useFirebaseList<T>(subcollection: string) {
   }, [subcollection, user]);
 
   const items = data
-    ? Object.entries(data).map(([id, item]) => ({
-        id,
-        ...item,
-        // Convert Firestore Timestamps to ms for UI compatibility
-        createdAt: toMs((item as any).createdAt),
-        updatedAt: toMs((item as any).updatedAt),
-      }))
+    ? Object.entries(data).map(([id, item]) => {
+        const createdAtMs = toMs((item as any).createdAt);
+        const updatedAtMs = toMs((item as any).updatedAt);
+        // Mark as "new" if created within the last hour
+        const isNew = createdAtMs > 0 && (Date.now() - createdAtMs) < 3600000;
+        return {
+          id,
+          ...item,
+          createdAt: createdAtMs,
+          updatedAt: updatedAtMs,
+          isNew,
+        };
+      })
     : [];
 
-  // CRUD operations
+  // CRUD operations with better error handling
   const addItem = useCallback(
     async (itemData: Record<string, unknown>) => {
-      return firebaseCreate(subcollection, itemData);
+      try {
+        setError(null);
+        return await firebaseCreate(subcollection, itemData);
+      } catch (err: any) {
+        const msg = err.message || "Erro ao criar item";
+        console.error(`[useFirebaseList] Create error:`, err);
+        setError(msg);
+        throw err; // Re-throw so caller can handle
+      }
     },
     [subcollection]
   );
 
   const editItem = useCallback(
     async (id: string, itemData: Partial<Record<string, unknown>>) => {
-      return firebaseUpdateItem(subcollection, id, itemData);
+      try {
+        setError(null);
+        await firebaseUpdateItem(subcollection, id, itemData);
+      } catch (err: any) {
+        const msg = err.message || "Erro ao atualizar item";
+        console.error(`[useFirebaseList] Update error:`, err);
+        setError(msg);
+        throw err; // Re-throw so caller can handle
+      }
     },
     [subcollection]
   );
 
   const deleteItem = useCallback(
     async (id: string) => {
-      return firebaseRemoveItem(subcollection, id);
+      try {
+        setError(null);
+        await firebaseRemoveItem(subcollection, id);
+      } catch (err: any) {
+        const msg = err.message || "Erro ao excluir item";
+        console.error(`[useFirebaseList] Delete error:`, err);
+        setError(msg);
+        throw err; // Re-throw so caller can handle
+      }
     },
     [subcollection]
   );
 
-  return { data, items, loading, error, addItem, editItem, deleteItem };
+  const clearError = useCallback(() => setError(null), []);
+
+  return { data, items, loading, error, addItem, editItem, deleteItem, clearError };
 }
 
 export function useProducts() {

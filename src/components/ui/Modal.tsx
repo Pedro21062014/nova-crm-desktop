@@ -27,16 +27,17 @@ export function Modal({ open, onClose, title, children, className, size = "md" }
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px]"
             onClick={onClose}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            initial={{ opacity: 0, scale: 0.96, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, scale: 0.96, y: 20 }}
+            transition={{ type: "spring" as const, stiffness: 400, damping: 30, mass: 0.8 }}
             className={cn(
-              "fixed inset-x-0 top-[10%] z-50 mx-auto w-full rounded-2xl bg-card border border-border shadow-lg",
+              "fixed inset-x-0 top-[10%] z-50 mx-auto w-full rounded-2xl bg-card border border-border shadow-xl",
               sizes[size],
               className
             )}
