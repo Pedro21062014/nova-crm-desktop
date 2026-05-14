@@ -47,10 +47,24 @@ function merchantPath(): string {
   return `merchants/${_merchantId}`;
 }
 
+// Ensure merchantPath is available - fallback to auth.currentUser
+function ensureMerchantPath(): string {
+  try {
+    return merchantPath();
+  } catch {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      _merchantId = currentUser.uid;
+      return `merchants/${_merchantId}`;
+    }
+    throw new Error("Usuário não autenticado. Faça login novamente.");
+  }
+}
+
 // ── Generic CRUD helpers (Firestore) ──
 
 export async function getAll<T>(subcollection: string): Promise<Record<string, T> | null> {
-  const colRef = collection(db, merchantPath(), subcollection);
+  const colRef = collection(db, ensureMerchantPath(), subcollection);
   const snapshot = await getDocs(colRef);
   if (snapshot.empty) return null;
   const result: Record<string, T> = {};
@@ -61,7 +75,7 @@ export async function getAll<T>(subcollection: string): Promise<Record<string, T
 }
 
 export async function getById<T>(subcollection: string, id: string): Promise<T | null> {
-  const docRef = doc(db, merchantPath(), subcollection, id);
+  const docRef = doc(db, ensureMerchantPath(), subcollection, id);
   const snapshot = await getDoc(docRef);
   return snapshot.exists() ? (snapshot.data() as T) : null;
 }
@@ -71,7 +85,7 @@ export async function create<T extends Record<string, unknown>>(
   data: T
 ): Promise<string> {
   try {
-    const path = merchantPath();
+    const path = ensureMerchantPath();
     console.log(`[Firestore] Creating doc in ${path}/${subcollection}`);
     const colRef = collection(db, path, subcollection);
     const docRef = await addDoc(colRef, {
@@ -118,7 +132,7 @@ export async function updateItem<T extends Record<string, unknown>>(
   data: Partial<T>
 ): Promise<void> {
   try {
-    const path = merchantPath();
+    const path = ensureMerchantPath();
     console.log(`[Firestore] Updating doc ${path}/${subcollection}/${id}`, data);
     const docRef = doc(db, path, subcollection, id);
     await updateDoc(docRef, {
@@ -140,7 +154,7 @@ export async function updateItem<T extends Record<string, unknown>>(
 
 export async function removeItem(subcollection: string, id: string): Promise<void> {
   try {
-    const path = merchantPath();
+    const path = ensureMerchantPath();
     console.log(`[Firestore] Deleting doc ${path}/${subcollection}/${id}`);
     const docRef = doc(db, path, subcollection, id);
     await deleteDoc(docRef);
@@ -160,7 +174,7 @@ export function subscribe<T>(
   onError?: (error: Error) => void
 ): Unsubscribe {
   try {
-    const path = merchantPath();
+    const path = ensureMerchantPath();
     console.log(`[Firestore] Subscribing to ${path}/${subcollection}`);
     const colRef = collection(db, path, subcollection);
     // No orderBy — avoids missing docs that don't have createdAt field yet
@@ -196,7 +210,7 @@ export function subscribeDoc<T>(
   callback: (data: T | null) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const docRef = doc(db, merchantPath(), subcollection, docId);
+  const docRef = doc(db, ensureMerchantPath(), subcollection, docId);
 
   return onSnapshot(
     docRef,
@@ -361,6 +375,20 @@ export const COLLECTIONS = {
 } as const;
 
 // ── Scheduled Message (WhatsApp integration) ──
+
+export interface Coupon {
+  codigo: string;
+  descricao: string;
+  tipoDesconto: "porcentagem" | "valor_fixo";
+  valorDesconto: number;
+  valorMinimo?: number;
+  usoMaximo?: number;
+  usosAtuais?: number;
+  validoAte?: number; // ms timestamp
+  ativo?: boolean;
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
+}
 
 export interface ScheduledMessage {
   titulo: string;

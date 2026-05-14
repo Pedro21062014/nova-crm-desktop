@@ -11,6 +11,8 @@ import {
 } from "@/services/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { toMs } from "@/services/firebase";
+import { doc, onSnapshot, getDoc, setDoc, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export function useStoreConfig() {
   const { user } = useAuth();
@@ -31,7 +33,7 @@ export function useStoreConfig() {
       return;
     }
 
-    // Ensure merchant ID is set
+    // Always ensure merchant ID is set from the authenticated user
     setMerchantId(user.uid);
 
     let cancelled = false;
@@ -43,14 +45,7 @@ export function useStoreConfig() {
 
         if (cancelled) return;
 
-        // Ensure merchant ID is available
-        const mid = getMerchantId();
-        if (!mid) {
-          console.error("[useStoreConfig] No merchant ID available");
-          setError("Erro de autenticação. Tente fazer login novamente.");
-          setLoading(false);
-          return;
-        }
+        const uid = user.uid;
 
         // Clean up previous subscription
         if (unsubscribeRef.current) {
@@ -58,33 +53,31 @@ export function useStoreConfig() {
           unsubscribeRef.current = null;
         }
 
-        console.log(`[Firestore] Subscribing to merchant doc: ${mid}`);
+        console.log(`[useStoreConfig] Setting up subscription for merchant: ${uid}`);
 
-        // First, try to get existing data immediately (for faster UI)
-        try {
-          const existingData = await getMerchantData<StoreConfig>();
-          if (existingData && !cancelled) {
-            console.log("[useStoreConfig] Loaded existing config:", existingData);
-            setConfig(existingData);
-            setLoading(false);
-          }
-        } catch (err) {
-          console.warn("[useStoreConfig] Could not pre-load config:", err);
-        }
+        // Use direct Firestore doc subscription to the merchant document
+        const docRef = doc(db, "merchants", uid);
 
-        // Then set up real-time listener
-        const unsubscribe = subscribeMerchant<StoreConfig>(
-          (data) => {
+        // Set up real-time listener directly
+        const unsubscribe = onSnapshot(
+          docRef,
+          (snapshot) => {
             if (!cancelled) {
-              console.log("[useStoreConfig] Received config update:", data);
-              setConfig(data);
+              if (snapshot.exists()) {
+                const data = snapshot.data() as StoreConfig;
+                console.log("[useStoreConfig] Received config:", data);
+                setConfig(data);
+              } else {
+                console.log("[useStoreConfig] No merchant document exists yet");
+                setConfig(null);
+              }
               setLoading(false);
               setError(null);
             }
           },
           (err) => {
             if (!cancelled) {
-              console.error(`[Firestore] Merchant subscription error:`, err);
+              console.error("[useStoreConfig] Subscription error:", err);
               setError("Erro ao carregar dados da loja");
               setLoading(false);
             }
@@ -92,10 +85,9 @@ export function useStoreConfig() {
         );
 
         unsubscribeRef.current = unsubscribe;
-        setLoading(false);
       } catch (err) {
         if (!cancelled) {
-          console.error(`[Firestore] Merchant setup error:`, err);
+          console.error("[useStoreConfig] Setup error:", err);
           setError(err instanceof Error ? err.message : "Erro ao carregar dados");
           setLoading(false);
         }
@@ -119,18 +111,18 @@ export function useStoreConfig() {
 
       try {
         setError(null);
-        const exists = await merchantExists();
-        if (exists) {
-          await updateMerchantData(data);
-        } else {
-          // Create merchant document if it doesn't exist
-          await createWithId("merchants", user.uid, {
-            ...data,
-            isSuperuser: false,
-            isBlocked: false,
-          } as Record<string, unknown>);
-        }
+        const uid = user.uid;
+
+        // Use setDoc with merge directly on the merchant document
+        const docRef = doc(db, "merchants", uid);
+        await setDoc(docRef, {
+          ...data,
+          updatedAt: Timestamp.now(),
+        } as Record<string, unknown>, { merge: true });
+
+        console.log("[useStoreConfig] Config saved successfully");
       } catch (err: any) {
+        console.error("[useStoreConfig] Save error:", err);
         const msg = err.message || "Erro ao salvar configurações";
         setError(msg);
         throw err;

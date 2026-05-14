@@ -12,12 +12,19 @@ export function formatCurrency(value: number): string {
   }).format(value);
 }
 
-export function formatDate(date: string | Date | number): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(date));
+export function formatDate(date: string | Date | number | undefined): string {
+  if (!date || date === 0) return "—";
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "—";
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(d);
+  } catch {
+    return "—";
+  }
 }
 
 export function formatRelativeDate(date: string | Date | number): string {

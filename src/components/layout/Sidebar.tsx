@@ -6,6 +6,7 @@ import {
   Package,
   Users,
   ShoppingCart,
+  Tag,
   Settings,
   ChevronLeft,
   LogOut,
@@ -20,6 +21,7 @@ const navItems = [
   { icon: Package, label: "Produtos", path: "/produtos" },
   { icon: Users, label: "Clientes", path: "/clientes" },
   { icon: ShoppingCart, label: "Pedidos", path: "/pedidos" },
+  { icon: Tag, label: "Cupons", path: "/cupons" },
   { icon: MessageCircle, label: "WhatsApp", path: "/whatsapp" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];

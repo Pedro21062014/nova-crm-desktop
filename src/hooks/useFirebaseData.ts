@@ -9,6 +9,7 @@ import {
   type Product,
   type Client,
   type Order,
+  type Coupon,
   type ScheduledMessage,
   COLLECTIONS,
 } from "@/services/firebase";
@@ -187,6 +188,10 @@ export function useClients() {
 
 export function useOrders() {
   return useFirebaseList<Order>(COLLECTIONS.ORDERS);
+}
+
+export function useCoupons() {
+  return useFirebaseList<Coupon>(COLLECTIONS.COUPONS);
 }
 
 export function useScheduledMessages() {
