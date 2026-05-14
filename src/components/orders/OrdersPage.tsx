@@ -19,10 +19,21 @@ import { type OrderItem } from "@/services/firebase";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
 // Helpers for field name compatibility
-function pName(p: any): string { return p.nome || p.name || ""; }
-function pPrice(p: any): number { return p.preco || p.price || 0; }
-function cName(c: any): string { return c.nome || c.name || ""; }
-function oClientName(o: any): string { return o.clienteNome || o.customerName || ""; }
+function safeStr(val: any): string {
+  if (val == null) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (typeof val === "object") {
+    const parts = Object.values(val).filter((v: any) => v && (typeof v === "string" || typeof v === "number")).map(String);
+    return parts.length > 0 ? parts.join(", ") : "";
+  }
+  return String(val);
+}
+
+function pName(p: any): string { return safeStr(p.nome || p.name); }
+function pPrice(p: any): number { return Number(p.preco || p.price) || 0; }
+function cName(c: any): string { return safeStr(c.nome || c.name); }
+function oClientName(o: any): string { return safeStr(o.clienteNome || o.customerName); }
 function getOrderType(o: any): "entrada" | "saida" {
   const tipo = o.tipo || o.type;
   if (tipo === "entrada" || tipo === "in") return "entrada";

@@ -19,12 +19,32 @@ import { type Client } from "@/services/firebase";
 import { formatDate, cn } from "@/lib/utils";
 
 // Helpers for field name compatibility
-function cName(c: any): string { return c.nome || c.name || ""; }
-function cEmail(c: any): string { return c.email || ""; }
-function cPhone(c: any): string { return c.telefone || c.phone || ""; }
-function cAddr(c: any): string { return c.endereco || c.address || ""; }
-function cDoc(c: any): string { return c.cpfCnpj || c.document || ""; }
-function cNotes(c: any): string { return c.observacoes || c.notes || ""; }
+// Also handles cases where the value is an object (e.g. endereco = {street, city, ...})
+function safeStr(val: any): string {
+  if (val == null) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (typeof val === "object") {
+    // For address objects like {street, number, neighborhood, city, zip, coordinates}
+    const parts = [val.street, val.number, val.neighborhood, val.city, val.zip, val.state, val.complement]
+      .filter((p: any) => p && typeof p !== "object");
+    if (parts.length > 0) return parts.join(", ");
+    // Fallback: join all non-object string values
+    const allParts = Object.values(val)
+      .filter((v: any) => v && typeof v === "string" || typeof v === "number")
+      .map(String);
+    if (allParts.length > 0) return allParts.join(", ");
+    return JSON.stringify(val);
+  }
+  return String(val);
+}
+
+function cName(c: any): string { return safeStr(c.nome || c.name); }
+function cEmail(c: any): string { return safeStr(c.email); }
+function cPhone(c: any): string { return safeStr(c.telefone || c.phone); }
+function cAddr(c: any): string { return safeStr(c.endereco || c.address); }
+function cDoc(c: any): string { return safeStr(c.cpfCnpj || c.document); }
+function cNotes(c: any): string { return safeStr(c.observacoes || c.notes); }
 
 const emptyClient: Omit<Client, "createdAt" | "updatedAt"> = {
   nome: "",

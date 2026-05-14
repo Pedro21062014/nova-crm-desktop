@@ -79,12 +79,23 @@ export function useFirebaseList<T>(subcollection: string) {
             if (!cancelled) {
               console.error(`[Firestore] Subscription error for ${subcollection}:`, err);
               const msg = err.message || "";
-              if (msg.includes("permission-denied") || msg.includes("Permissão")) {
-                setError("Permissão negada. Verifique as regras do Firestore.");
+              const isPermissionDenied = msg.includes("permission-denied") || msg.includes("Permissão") || msg.includes("Missing or insufficient permissions");
+              if (isPermissionDenied) {
+                // For optional subcollections (scheduledMessages, coupons), permission errors are non-critical
+                // Just log and show empty data instead of blocking the whole page
+                console.warn(`[Firestore] Permission denied for ${subcollection} - this may be expected if the subcollection rules are not set up`);
+                setData(null);
+                setLoading(false);
+                // Only set error for core collections
+                if (subcollection === "products" || subcollection === "clients" || subcollection === "orders") {
+                  setError("Permissão negada. Verifique as regras do Firestore.");
+                } else {
+                  setError(null);
+                }
               } else {
                 setError("Erro ao carregar dados. Verifique sua conexão.");
+                setLoading(false);
               }
-              setLoading(false);
             }
           }
         );
