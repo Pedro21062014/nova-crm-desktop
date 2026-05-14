@@ -16,7 +16,23 @@ import {
   type DocumentData,
   type DocumentSnapshot,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import {
+  ref as rtdbRef,
+  get as rtdbGet,
+  set as rtdbSet,
+  update as rtdbUpdate,
+  push as rtdbPush,
+  remove as rtdbRemove,
+  onValue,
+  off,
+  onChildAdded,
+  onChildChanged,
+  orderByChild,
+  limitToLast,
+  query as rtdbQuery,
+  type Unsubscribe as RtdbUnsubscribe,
+} from "firebase/database";
+import { db, rtdb } from "@/lib/firebase";
 import { auth } from "@/lib/firebase";
 
 // ── Merchant Resolution ──
@@ -411,4 +427,210 @@ export function toMs(ts: Timestamp | number | undefined): number {
     return (ts as any).seconds * 1000 + (ts as any).nanoseconds / 1000000;
   }
   return 0;
+}
+
+// ── Realtime Database helpers ──
+
+// Get merchant data from RTDB (fallback for Firestore)
+export async function getMerchantDataRTDB<T>(): Promise<T | null> {
+  if (!_merchantId) return null;
+  try {
+    const merchantRef = rtdbRef(rtdb, `merchants/${_merchantId}`);
+    const snapshot = await rtdbGet(merchantRef);
+    if (snapshot.exists()) {
+      console.log("[RTDB] Got merchant data:", snapshot.val());
+      return snapshot.val() as T;
+    }
+    console.log("[RTDB] No merchant data found");
+    return null;
+  } catch (err) {
+    console.error("[RTDB] Error getting merchant data:", err);
+    return null;
+  }
+}
+
+// Subscribe to merchant data in RTDB
+export function subscribeMerchantRTDB<T>(
+  callback: (data: T | null) => void,
+  onError?: (error: Error) => void
+): RtdbUnsubscribe {
+  if (!_merchantId) {
+    console.warn("[RTDB] Cannot subscribe to merchant: no merchant ID");
+    if (onError) onError(new Error("Usuário não autenticado"));
+    return () => {};
+  }
+
+  const merchantRef = rtdbRef(rtdb, `merchants/${_merchantId}`);
+
+  const unsubscribe = onValue(
+    merchantRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.val() as T);
+      } else {
+        callback(null);
+      }
+    },
+    (error) => {
+      console.error("[RTDB] Error subscribing to merchant:", error);
+      if (onError) onError(error);
+    }
+  );
+
+  return unsubscribe;
+}
+
+// Update merchant data in RTDB
+export async function updateMerchantDataRTDB<T>(data: Partial<T>): Promise<void> {
+  if (!_merchantId) throw new Error("Usuário não autenticado");
+  try {
+    const merchantRef = rtdbRef(rtdb, `merchants/${_merchantId}`);
+    await rtdbUpdate(merchantRef, {
+      ...data,
+      updatedAt: Date.now(),
+    } as Record<string, unknown>);
+    console.log("[RTDB] Merchant data updated successfully");
+  } catch (err: any) {
+    console.error("[RTDB] Error updating merchant data:", err);
+    throw new Error(`Erro ao salvar: ${err.message || err}`);
+  }
+}
+
+// ── Chat (Realtime Database) ──
+
+export interface ChatMessage {
+  id?: string;
+  text: string;
+  senderId: string;
+  senderName: string;
+  senderRole: "merchant" | "customer";
+  timestamp: number;
+  read?: boolean;
+}
+
+export interface ChatConversation {
+  id?: string;
+  customerName: string;
+  customerPhone?: string;
+  lastMessage?: string;
+  lastMessageTime?: number;
+  unreadCount?: number;
+}
+
+// Subscribe to chat conversations list
+export function subscribeChats(
+  callback: (chats: Record<string, ChatConversation> | null) => void,
+  onError?: (error: Error) => void
+): RtdbUnsubscribe {
+  if (!_merchantId) {
+    if (onError) onError(new Error("Usuário não autenticado"));
+    return () => {};
+  }
+
+  const chatsRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats`);
+
+  return onValue(
+    chatsRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.val() as Record<string, ChatConversation>);
+      } else {
+        callback(null);
+      }
+    },
+    (error) => {
+      console.error("[RTDB] Error subscribing to chats:", error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+// Subscribe to messages in a specific chat
+export function subscribeChatMessages(
+  chatId: string,
+  callback: (messages: Record<string, ChatMessage> | null) => void,
+  onError?: (error: Error) => void
+): RtdbUnsubscribe {
+  if (!_merchantId) {
+    if (onError) onError(new Error("Usuário não autenticado"));
+    return () => {};
+  }
+
+  const messagesRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}/messages`);
+
+  return onValue(
+    messagesRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.val() as Record<string, ChatMessage>);
+      } else {
+        callback(null);
+      }
+    },
+    (error) => {
+      console.error("[RTDB] Error subscribing to chat messages:", error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+// Send a chat message
+export async function sendChatMessage(
+  chatId: string,
+  message: Omit<ChatMessage, "id">
+): Promise<string> {
+  if (!_merchantId) throw new Error("Usuário não autenticado");
+  try {
+    const messagesRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}/messages`);
+    const newMsgRef = rtdbPush(messagesRef);
+    await rtdbSet(newMsgRef, {
+      ...message,
+      timestamp: Date.now(),
+      read: false,
+    });
+
+    // Update conversation metadata
+    const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
+    await rtdbUpdate(chatRef, {
+      lastMessage: message.text,
+      lastMessageTime: Date.now(),
+    } as Record<string, unknown>);
+
+    return newMsgRef.key || "";
+  } catch (err: any) {
+    console.error("[RTDB] Error sending message:", err);
+    throw new Error(`Erro ao enviar mensagem: ${err.message || err}`);
+  }
+}
+
+// Create a new chat conversation
+export async function createChatConversation(
+  conversation: Omit<ChatConversation, "id">
+): Promise<string> {
+  if (!_merchantId) throw new Error("Usuário não autenticado");
+  try {
+    const chatsRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats`);
+    const newChatRef = rtdbPush(chatsRef);
+    await rtdbSet(newChatRef, {
+      ...conversation,
+      lastMessageTime: Date.now(),
+      unreadCount: 0,
+    });
+    console.log("[RTDB] Chat conversation created:", newChatRef.key);
+    return newChatRef.key || "";
+  } catch (err: any) {
+    console.error("[RTDB] Error creating chat:", err);
+    throw new Error(`Erro ao criar conversa: ${err.message || err}`);
+  }
+}
+
+// Mark messages as read
+export async function markChatAsRead(chatId: string): Promise<void> {
+  if (!_merchantId) throw new Error("Usuário não autenticado");
+  try {
+    const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
+    await rtdbUpdate(chatRef, { unreadCount: 0 } as Record<string, unknown>);
+  } catch (err: any) {
+    console.error("[RTDB] Error marking chat as read:", err);
+  }
 }

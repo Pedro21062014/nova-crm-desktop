@@ -7,6 +7,7 @@ import { ProductsPage } from "@/components/products/ProductsPage";
 import { ClientsPage } from "@/components/clients/ClientsPage";
 import { OrdersPage } from "@/components/orders/OrdersPage";
 import { CouponsPage } from "@/components/coupons/CouponsPage";
+import { ChatPage } from "@/components/chat/ChatPage";
 import { WhatsAppPage } from "@/components/whatsapp/WhatsAppPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 
@@ -36,6 +37,7 @@ function ProtectedRoutes() {
         <Route path="/clientes" element={<ClientsPage />} />
         <Route path="/pedidos" element={<OrdersPage />} />
         <Route path="/cupons" element={<CouponsPage />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/whatsapp" element={<WhatsAppPage />} />
         <Route path="/configuracoes" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
