@@ -24,3 +24,48 @@ Stage Summary:
 - GitHub Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v1.5.0
 - Linux: nova-crm_1.5.0_amd64.deb (107MB)
 - Windows: Nova-CRM-1.5.0-win-x64.zip (171MB)
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix chat not showing correct names - v1.7.1
+
+Work Log:
+- Explored the CRM web app repo (https://github.com/Pedro21062014/CRM) to understand its chat data structure
+- Discovered the CRM uses a HYBRID approach: chat conversation metadata in Firestore + messages in RTDB
+- CRM stores conversations at `merchants/{uid}/chats` as a Firestore subcollection with fields: `customerName`, `customerId`, `lastMessage`, `lastMessageSender`, `updatedAt`
+- CRM stores messages at `merchants/{uid}/chats/{chatId}/messages` in RTDB with fields: `text`, `sender` ('merchant'|'customer'), `createdAt` (serverTimestamp)
+- The old nova-crm-electron code was reading conversations from RTDB only, which is why no chats appeared
+- Updated `firebase.ts`:
+  - Changed ChatMessage interface to support both CRM format (`sender`, `createdAt`) and nova-crm format (`senderRole`, `senderId`, `senderName`, `timestamp`)
+  - Changed ChatConversation interface to support both CRM fields (`customerId`, `lastMessageSender`, `updatedAt`) and nova-crm fields (`customerPhone`, `lastMessageTime`)
+  - Added `subscribeChatsFirestore()` - subscribes to Firestore chats subcollection (primary source)
+  - Kept `subscribeChatsRTDB()` as fallback
+  - Updated `sendChatMessage()` to write CRM-compatible messages (`sender`, `createdAt`) and update Firestore conversation metadata
+  - Updated `createChatConversation()` to create in Firestore first (primary), RTDB fallback
+  - Added `deleteChatConversation()` for both Firestore and RTDB cleanup
+  - Added `rtdbServerTimestamp` import and `orderBy` import
+- Updated `useChat.ts`:
+  - `useChats()` now subscribes to Firestore first, falls back to RTDB after 3s timeout
+  - Added `deleteChat` function
+  - Simplified `sendMessage` - no longer needs senderName parameter
+  - Added `getMsgTime()` helper to extract timestamp from both CRM and nova-crm message formats
+  - Added `isMerchantMessage()` helper to detect sender role from both formats
+- Updated `ChatPage.tsx`:
+  - Uses `getConvName()` to get customer name from conversation
+  - Uses `getConvTime()` to get last message time from either `updatedAt` or `lastMessageTime`
+  - Uses `isMerchantMessage()` for correct merchant/customer message detection
+  - Shows "Você" for merchant messages, customer name for customer messages
+  - Added delete conversation button with confirmation
+  - Uses `formatMsgTime()` that handles both timestamp formats
+  - Removed hardcoded "Loja" sender name
+- Updated version to 1.7.1
+- Build successful
+
+Stage Summary:
+- Version: 1.7.1
+- Fixed: Chat now reads conversations from Firestore (where CRM stores them) with RTDB fallback
+- Fixed: Correct customer names displayed from `customerName` field
+- Fixed: Messages show "Você" for merchant and customer name for customer
+- Fixed: Compatible with both CRM message format and nova-crm format
+- Added: Delete conversation functionality
