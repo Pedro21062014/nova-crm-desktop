@@ -3,18 +3,28 @@ import { Badge } from "@/components/ui";
 import { formatCurrency, formatRelativeDate } from "@/lib/utils";
 import { toMs, type Order } from "@/services/firebase";
 
-// Helpers for field name compatibility
-function oClientName(o: any): string { return o.clienteNome || o.customerName || ""; }
-function getOrderStatus(o: any): string { return o.status || "pendente"; }
+// Helpers for field name compatibility (CRM vs old nova-crm)
+function oClientName(o: any): string {
+  return o.customerName || o.clienteNome || "";
+}
+
+function getOrderStatus(o: any): string {
+  return o.status || "new";
+}
 
 const statusMap: Record<string, { label: string; variant: "success" | "warning" | "danger" | "info" }> = {
+  // CRM statuses
+  pending_payment: { label: "Pag. Pendente", variant: "warning" },
+  new: { label: "Novo", variant: "info" },
+  processing: { label: "Preparando", variant: "info" },
+  completed: { label: "Concluído", variant: "success" },
+  cancelled: { label: "Cancelado", variant: "danger" },
+  // Old nova-crm statuses
   pago: { label: "Pago", variant: "success" },
   paid: { label: "Pago", variant: "success" },
   pendente: { label: "Pendente", variant: "warning" },
   pending: { label: "Pendente", variant: "warning" },
   cancelado: { label: "Cancelado", variant: "danger" },
-  cancelled: { label: "Cancelado", variant: "danger" },
-  completed: { label: "Concluído", variant: "success" },
 };
 
 interface RecentOrdersProps {
@@ -39,7 +49,7 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
   return (
     <div className="space-y-3">
       {sorted.map((order, i) => {
-        const status = statusMap[getOrderStatus(order)] || statusMap.pendente;
+        const status = statusMap[getOrderStatus(order)] || statusMap.new;
         const cname = oClientName(order);
         const ts = toMs(order.createdAt);
         return (

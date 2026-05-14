@@ -336,29 +336,86 @@ export interface Client {
 }
 
 export interface Order {
-  clienteId: string;
-  clienteNome: string;
-  itens: OrderItem[];
+  // CRM fields (primary)
+  merchantId?: string;
+  customerName?: string;      // CRM: customer name
+  customerEmail?: string;
+  customerPhone?: string;
+  deliveryAddress?: {
+    street?: string;
+    number?: string;
+    neighborhood?: string;
+    city?: string;
+    zip?: string;
+    complement?: string;
+  };
+  items?: OrderItem[];
   total: number;
-  status: string;
-  tipo: string;
-  formaPagamento?: string;
-  observacoes?: string;
-  paymentStatus?: string;
+  subtotal?: number;
+  discount?: number;
+  couponCode?: string;
+  deliveryMethod?: 'delivery' | 'pickup';
+  status: string;            // CRM: pending_payment | new | processing | completed | cancelled
+  paymentMethod?: string;    // CRM: PIX | CREDIT_CARD | etc.
+  paymentId?: string;        // CRM: Asaas payment ID (static_ prefix = manual PIX)
+  paymentStatus?: 'pending' | 'paid' | 'failed';
+  rating?: number;
+  review?: string;
+  date?: string;             // CRM: date string for filtering
   isNew?: boolean;
   createdAt?: Timestamp | number;
   updatedAt?: Timestamp | number;
+
+  // Old nova-crm fields (backward compat)
+  clienteId?: string;
+  clienteNome?: string;
+  itens?: OrderItem[];
+  tipo?: string;             // 'entrada' | 'saida'
+  formaPagamento?: string;
+  observacoes?: string;
 }
 
 export interface OrderItem {
-  produtoId: string;
-  produtoNome: string;
-  quantidade: number;
-  precoUnitario: number;
-  subtotal: number;
+  // CRM fields
+  productId?: string;
+  productName?: string;
+  quantity?: number;
+  price?: number;
+  imageUrl?: string;
+  // Old nova-crm fields (backward compat)
+  produtoId?: string;
+  produtoNome?: string;
+  quantidade?: number;
+  precoUnitario?: number;
+  subtotal?: number;
 }
 
 export interface StoreConfig {
+  // CRM storeConfig fields (primary)
+  storeName?: string;
+  description?: string;
+  category?: string;
+  whatsapp?: string;
+  themeColor?: string;
+  logoUrl?: string;
+  bannerUrl?: string;
+  sections?: any[];
+  ratingSum?: number;
+  ratingCount?: number;
+  fullAddress?: string;
+  latitude?: number;
+  longitude?: number;
+  isPublished?: boolean;
+  enableNativePayment?: boolean;
+  pixKey?: string;
+  document?: string;         // CPF/CNPJ
+  isOpen?: boolean;
+  openingHours?: Record<string, { open: string; close: string; closed: boolean }>;
+  deliverySettings?: any;
+  allowPickup?: boolean;
+  isOnboarded?: boolean;
+
+  // Old nova-crm fields (backward compat)
   nomeLoja?: string;
   name?: string;
   slogan?: string;
@@ -375,8 +432,11 @@ export interface StoreConfig {
     facebook?: string;
     whatsapp?: string;
   };
+
+  // System fields
   isSuperuser?: boolean;
   isBlocked?: boolean;
+  subscription?: any;
   createdAt?: Timestamp | number;
   updatedAt?: Timestamp | number;
 }
@@ -395,15 +455,25 @@ export const COLLECTIONS = {
 // ── Scheduled Message (WhatsApp integration) ──
 
 export interface Coupon {
-  codigo: string;
-  descricao: string;
-  tipoDesconto: "porcentagem" | "valor_fixo";
-  valorDesconto: number;
+  // CRM fields (primary)
+  code?: string;              // 'PROMO10' (always UPPERCASE)
+  type?: 'percentage' | 'fixed';
+  value?: number;            // discount value
+  minPurchase?: number;      // minimum purchase amount
+  usageCount?: number;       // how many times used
+  active?: boolean;          // toggle on/off
+
+  // Old nova-crm fields (backward compat)
+  codigo?: string;
+  descricao?: string;
+  tipoDesconto?: "porcentagem" | "valor_fixo";
+  valorDesconto?: number;
   valorMinimo?: number;
   usoMaximo?: number;
   usosAtuais?: number;
   validoAte?: number; // ms timestamp
   ativo?: boolean;
+
   createdAt?: Timestamp | number;
   updatedAt?: Timestamp | number;
 }

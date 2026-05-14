@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   DollarSign,
@@ -5,7 +6,8 @@ import {
   Users,
   TrendingUp,
   ArrowUpRight,
-  ArrowDownRight,
+  CreditCard,
+  Package,
 } from "lucide-react";
 import { Card, Skeleton } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
@@ -14,15 +16,39 @@ import { formatCurrency } from "@/lib/utils";
 import { WeeklyChart } from "@/components/dashboard/WeeklyChart";
 import { RecentOrders } from "@/components/dashboard/RecentOrders";
 
-// Helpers for field name compatibility
-function getOrderType(o: any): "entrada" | "saida" {
-  const tipo = o.tipo || o.type;
-  if (tipo === "entrada" || tipo === "in") return "entrada";
-  if (tipo === "saida" || tipo === "out" || tipo === "expense") return "saida";
-  return "entrada";
+// ── Field compatibility helpers (CRM vs old nova-crm) ──
+
+function getOrderStatus(o: any): string {
+  return o.status || "new";
 }
 
-function getOrderStatus(o: any): string { return o.status || "pendente"; }
+function getOrderCustomerName(o: any): string {
+  return o.customerName || o.clienteNome || "Cliente";
+}
+
+// Check if order is cancelled
+function isCancelled(o: any): boolean {
+  const status = getOrderStatus(o);
+  return status === "cancelled";
+}
+
+// Check if order is a platform-managed paid payment (PIX/Credit Card with real paymentId)
+function isPlatformPaid(o: any): boolean {
+  const method = o.paymentMethod;
+  const paymentId = o.paymentId;
+  const paymentStatus = o.paymentStatus;
+
+  const isNativePayment = method === "PIX" || method === "CREDIT_CARD";
+  const isPlatformManaged = isNativePayment && paymentId && !String(paymentId).startsWith("static_");
+
+  return isPlatformManaged && paymentStatus === "paid";
+}
+
+// Check if order is pending (new or pending_payment)
+function isPending(o: any): boolean {
+  const status = getOrderStatus(o);
+  return status === "new" || status === "pending_payment" || status === "pending" || status === "pendente";
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -43,64 +69,70 @@ export function DashboardPage() {
   const { items: products, loading: productsLoading } = useProducts();
   const { config: storeConfig } = useStoreConfig();
 
-  const totalRevenue = orders
-    .filter((o) => (getOrderStatus(o) === "pago" || getOrderStatus(o) === "paid") && getOrderType(o) === "entrada")
-    .reduce((sum, o) => sum + (o.total || 0), 0);
+  // Revenue calculations matching CRM DashboardHome.tsx logic:
+  // - Faturamento Total = sum of order.total where status !== 'cancelled'
+  // - Valor Pago (Pix/Cartão) = sum of order.total where platform-managed payment AND paymentStatus === 'paid'
+  // - Vendas (Pedidos) = count of non-cancelled orders
+  const { totalRevenue, totalPaid, totalOrders, pendingOrders } = useMemo(() => {
+    let revenue = 0;
+    let paid = 0;
+    let orderCount = 0;
+    let pending = 0;
 
-  const pendingOrders = orders.filter((o) => getOrderStatus(o) === "pendente" || getOrderStatus(o) === "pending").length;
+    orders.forEach((o) => {
+      const orderTotal = Number(o.total || 0);
+
+      if (!isCancelled(o) && !isNaN(orderTotal)) {
+        orderCount++;
+        revenue += orderTotal;
+
+        if (isPlatformPaid(o)) {
+          paid += orderTotal;
+        }
+      }
+
+      if (isPending(o)) {
+        pending++;
+      }
+    });
+
+    return { totalRevenue: revenue, totalPaid: paid, totalOrders: orderCount, pendingOrders: pending };
+  }, [orders]);
+
   const totalClients = clients.length;
   const totalProducts = products.length;
 
-  const revenueVsExpenses = orders.reduce(
-    (acc, o) => {
-      const status = getOrderStatus(o);
-      if (status === "pago" || status === "paid") {
-        if (getOrderType(o) === "entrada") acc.entradas += o.total || 0;
-        else acc.saidas += o.total || 0;
-      }
-      return acc;
-    },
-    { entradas: 0, saidas: 0 }
-  );
-
-  const storeName = storeConfig?.nomeLoja || storeConfig?.name || "Nova CRM";
+  // Store name: prefer CRM storeConfig.storeName, then old fields
+  const storeName = storeConfig?.storeName || storeConfig?.nomeLoja || storeConfig?.name || "Nova CRM";
 
   const stats = [
     {
-      label: "Receita Total",
+      label: "Faturamento Total",
       value: formatCurrency(totalRevenue),
       icon: DollarSign,
-      change: "+12%",
-      positive: true,
       color: "text-success",
       bg: "bg-success-light",
     },
     {
-      label: "Pedidos Pendentes",
-      value: String(pendingOrders),
-      icon: ShoppingCart,
-      change: pendingOrders > 5 ? "+3" : "-2",
-      positive: pendingOrders <= 5,
-      color: "text-warning",
-      bg: "bg-warning-light",
+      label: "Valor Pago (Pix/Cartão)",
+      value: formatCurrency(totalPaid),
+      icon: CreditCard,
+      color: "text-blue-500",
+      bg: "bg-blue-50",
     },
     {
-      label: "Total de Clientes",
-      value: String(totalClients),
-      icon: Users,
-      change: "+8%",
-      positive: true,
+      label: "Vendas",
+      value: String(totalOrders),
+      icon: ShoppingCart,
       color: "text-accent",
       bg: "bg-accent-light",
     },
     {
-      label: "Produtos Ativos",
-      value: String(totalProducts),
-      icon: TrendingUp,
-      change: "+5%",
-      positive: true,
-      color: "text-foreground",
-      bg: "bg-muted",
+      label: "Pedidos Pendentes",
+      value: String(pendingOrders),
+      icon: Package,
+      color: "text-warning",
+      bg: "bg-warning-light",
     },
   ];
 
@@ -131,7 +163,6 @@ export function DashboardPage() {
                 <div className="space-y-3">
                   <Skeleton className="h-4 w-24" />
                   <Skeleton className="h-8 w-32" />
-                  <Skeleton className="h-4 w-16" />
                 </div>
               </Card>
             ))
@@ -143,23 +174,6 @@ export function DashboardPage() {
                     <p className="text-2xl font-semibold tracking-tight">
                       {stat.value}
                     </p>
-                    <div className="flex items-center gap-1">
-                      {stat.positive ? (
-                        <ArrowUpRight className="h-3.5 w-3.5 text-success" />
-                      ) : (
-                        <ArrowDownRight className="h-3.5 w-3.5 text-danger" />
-                      )}
-                      <span
-                        className={`text-xs font-medium ${
-                          stat.positive ? "text-success" : "text-danger"
-                        }`}
-                      >
-                        {stat.change}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        vs. mês anterior
-                      </span>
-                    </div>
                   </div>
                   <div
                     className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.bg}`}
@@ -180,7 +194,7 @@ export function DashboardPage() {
                 Desempenho Semanal
               </h2>
               <p className="text-sm text-muted-foreground">
-                Entradas vs Saídas dos últimos 7 dias
+                Receita dos últimos 7 dias
               </p>
             </div>
             {isLoading ? (

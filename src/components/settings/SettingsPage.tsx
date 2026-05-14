@@ -1,22 +1,19 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Store, Save, Globe, Phone, Mail, Clock, Camera, Globe2, MessageCircle, AlertCircle, X, CheckCircle2 } from "lucide-react";
+import { Store, Save, Phone, Mail, Clock, Camera, Globe2, MessageCircle, AlertCircle, X, CheckCircle2, MapPin, CreditCard, Key } from "lucide-react";
 import { Card, Button, Input, Skeleton } from "@/components/ui";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
 import { type StoreConfig } from "@/services/firebase";
 
-// Helper: safely convert any value to a string for form inputs.
-// Handles address objects like {street, number, neighborhood, city, zip, coordinates}
+// Helper: safely convert any value to a string for form inputs
 function safeStr(val: any): string {
   if (val == null) return "";
   if (typeof val === "string") return val;
   if (typeof val === "number") return String(val);
   if (typeof val === "object") {
-    // For address objects
     const parts = [val.street, val.number, val.neighborhood, val.city, val.zip, val.state, val.complement]
       .filter((p: any) => p && typeof p !== "object");
     if (parts.length > 0) return parts.join(", ");
-    // Fallback: join all non-object string/number values
     const allParts = Object.values(val)
       .filter((v: any) => v && (typeof v === "string" || typeof v === "number"))
       .map(String);
@@ -37,19 +34,15 @@ const itemVariants = {
 };
 
 const emptyConfig: StoreConfig = {
-  nomeLoja: "",
-  slogan: "",
-  logo: "",
-  telefone: "",
-  email: "",
-  endereco: "",
-  cnpj: "",
-  horarioFuncionamento: "",
-  redesSociais: {
-    instagram: "",
-    facebook: "",
-    whatsapp: "",
-  },
+  storeName: "",
+  description: "",
+  whatsapp: "",
+  logoUrl: "",
+  fullAddress: "",
+  document: "",
+  pixKey: "",
+  enableNativePayment: false,
+  isOpen: true,
 };
 
 export function SettingsPage() {
@@ -64,19 +57,20 @@ export function SettingsPage() {
     if (config) {
       console.log("[SettingsPage] Merging config into form:", config);
       setForm({
-        nomeLoja: safeStr(config.nomeLoja || config.name || form.nomeLoja),
-        slogan: safeStr(config.slogan || form.slogan),
-        logo: safeStr(config.logo || form.logo),
-        telefone: safeStr(config.telefone || config.phone || form.telefone),
-        email: safeStr(config.email || form.email),
-        endereco: safeStr(config.endereco || config.address || form.endereco),
-        cnpj: safeStr(config.cnpj || form.cnpj),
-        horarioFuncionamento: safeStr(config.horarioFuncionamento || form.horarioFuncionamento),
-        redesSociais: {
-          instagram: safeStr(config.redesSociais?.instagram || form.redesSociais?.instagram),
-          facebook: safeStr(config.redesSociais?.facebook || form.redesSociais?.facebook),
-          whatsapp: safeStr(config.redesSociais?.whatsapp || form.redesSociais?.whatsapp),
-        },
+        storeName: safeStr(config.storeName || config.nomeLoja || config.name),
+        description: safeStr(config.description || config.slogan),
+        whatsapp: safeStr(config.whatsapp || config.telefone || config.phone),
+        logoUrl: safeStr(config.logoUrl || config.logo),
+        fullAddress: safeStr(config.fullAddress || config.endereco || config.address),
+        document: safeStr(config.document || config.cnpj),
+        pixKey: safeStr(config.pixKey),
+        enableNativePayment: config.enableNativePayment ?? false,
+        isOpen: config.isOpen ?? true,
+        // Preserve other fields
+        bannerUrl: safeStr(config.bannerUrl),
+        category: config.category || "",
+        themeColor: config.themeColor || "",
+        email: safeStr(config.email),
       });
     }
   }, [config]);
@@ -97,6 +91,16 @@ export function SettingsPage() {
     }
   };
 
+  // Derive display values (prefer CRM field names, fallback to old)
+  const storeName = form.storeName || config?.nomeLoja || config?.name || "";
+  const description = form.description || config?.slogan || "";
+  const whatsapp = form.whatsapp || config?.telefone || config?.phone || "";
+  const logoUrl = form.logoUrl || config?.logo || "";
+  const fullAddress = form.fullAddress || safeStr(config?.endereco || config?.address);
+  const document_ = form.document || config?.cnpj || "";
+  const pixKey = form.pixKey || "";
+  const email = form.email || config?.email || "";
+
   return (
     <motion.div
       variants={containerVariants}
@@ -108,10 +112,10 @@ export function SettingsPage() {
       <motion.div variants={itemVariants} className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Configurações
+            Minha Loja
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Informações da sua loja
+            Informações e configurações da sua loja
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -180,22 +184,39 @@ export function SettingsPage() {
               <div className="space-y-4">
                 <Input
                   label="Nome da Loja"
-                  value={form.nomeLoja}
-                  onChange={(e) => setForm({ ...form, nomeLoja: e.target.value })}
+                  value={storeName}
+                  onChange={(e) => setForm({ ...form, storeName: e.target.value })}
                   placeholder="Minha Loja"
                 />
                 <Input
-                  label="Slogan"
-                  value={form.slogan}
-                  onChange={(e) => setForm({ ...form, slogan: e.target.value })}
+                  label="Descrição / Slogan"
+                  value={description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="Uma frase que representa seu negócio"
                 />
                 <Input
                   label="URL do Logo"
-                  value={form.logo}
-                  onChange={(e) => setForm({ ...form, logo: e.target.value })}
-                  placeholder="https://..."
+                  value={logoUrl}
+                  onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
+                  placeholder="https://... ou base64"
                 />
+                <div>
+                  <label className="text-sm font-medium text-foreground/80">Categoria</label>
+                  <select
+                    value={form.category || ""}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                    className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
+                  >
+                    <option value="">Selecione...</option>
+                    <option value="Eletrônicos">Eletrônicos</option>
+                    <option value="Moda">Moda</option>
+                    <option value="Casa">Casa</option>
+                    <option value="Beleza">Beleza</option>
+                    <option value="Serviços">Serviços</option>
+                    <option value="Alimentação">Alimentação</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
               </div>
             </Card>
           </motion.div>
@@ -207,117 +228,101 @@ export function SettingsPage() {
                 <Phone className="h-5 w-5 text-accent" />
                 <h2 className="text-base font-semibold text-foreground">Contato</h2>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <Input
-                  label="Telefone"
-                  value={form.telefone}
-                  onChange={(e) => setForm({ ...form, telefone: e.target.value })}
-                  placeholder="(00) 00000-0000"
-                  icon={<Phone className="h-4 w-4" />}
+                  label="WhatsApp"
+                  value={whatsapp}
+                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                  placeholder="5500000000000"
+                  icon={<MessageCircle className="h-4 w-4" />}
                 />
                 <Input
                   label="Email"
-                  value={form.email}
+                  value={email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   placeholder="contato@minhaloja.com"
                   icon={<Mail className="h-4 w-4" />}
                 />
               </div>
-              <div className="mt-4">
-                <Input
-                  label="CNPJ"
-                  value={form.cnpj}
-                  onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                  placeholder="00.000.000/0001-00"
-                />
-              </div>
             </Card>
           </motion.div>
 
-          {/* Location & Hours */}
+          {/* Location */}
           <motion.div variants={itemVariants}>
             <Card>
               <div className="flex items-center gap-2 mb-5">
-                <Globe className="h-5 w-5 text-accent" />
+                <MapPin className="h-5 w-5 text-accent" />
                 <h2 className="text-base font-semibold text-foreground">
-                  Localização e Horário
+                  Localização
                 </h2>
               </div>
               <div className="space-y-4">
                 <Input
-                  label="Endereço"
-                  value={form.endereco}
-                  onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+                  label="Endereço Completo"
+                  value={fullAddress}
+                  onChange={(e) => setForm({ ...form, fullAddress: e.target.value })}
                   placeholder="Rua, número, bairro, cidade - UF"
                 />
-                <Input
-                  label="Horário de Funcionamento"
-                  value={form.horarioFuncionamento}
-                  onChange={(e) =>
-                    setForm({ ...form, horarioFuncionamento: e.target.value })
-                  }
-                  placeholder="Seg-Sex: 9h-18h / Sáb: 9h-13h"
-                  icon={<Clock className="h-4 w-4" />}
-                />
               </div>
             </Card>
           </motion.div>
 
-          {/* Social Media */}
+          {/* Payment */}
           <motion.div variants={itemVariants}>
             <Card>
               <div className="flex items-center gap-2 mb-5">
-                <Camera className="h-5 w-5 text-accent" />
+                <CreditCard className="h-5 w-5 text-accent" />
                 <h2 className="text-base font-semibold text-foreground">
-                  Redes Sociais
+                  Pagamento
                 </h2>
               </div>
               <div className="space-y-4">
                 <Input
-                  label="Instagram"
-                  value={form.redesSociais?.instagram || ""}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      redesSociais: {
-                        ...form.redesSociais,
-                        instagram: e.target.value,
-                      },
-                    })
-                  }
-                  placeholder="@minhaloja"
-                  icon={<Camera className="h-4 w-4" />}
+                  label="CPF/CNPJ"
+                  value={document_}
+                  onChange={(e) => setForm({ ...form, document: e.target.value })}
+                  placeholder="00.000.000/0001-00"
                 />
                 <Input
-                  label="Facebook"
-                  value={form.redesSociais?.facebook || ""}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      redesSociais: {
-                        ...form.redesSociais,
-                        facebook: e.target.value,
-                      },
-                    })
-                  }
-                  placeholder="facebook.com/minhaloja"
-                  icon={<Globe2 className="h-4 w-4" />}
+                  label="Chave PIX"
+                  value={pixKey}
+                  onChange={(e) => setForm({ ...form, pixKey: e.target.value })}
+                  placeholder="CPF, CNPJ, email ou telefone"
+                  icon={<Key className="h-4 w-4" />}
                 />
-                <Input
-                  label="WhatsApp"
-                  value={form.redesSociais?.whatsapp || ""}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      redesSociais: {
-                        ...form.redesSociais,
-                        whatsapp: e.target.value,
-                      },
-                    })
-                  }
-                  placeholder="5500000000000"
-                  icon={<MessageCircle className="h-4 w-4" />}
-                />
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-foreground/80">Aceitar pagamento nativo (PIX/Cartão)</label>
+                  <button
+                    onClick={() => setForm({ ...form, enableNativePayment: !form.enableNativePayment })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.enableNativePayment ? "bg-accent" : "bg-muted"}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${form.enableNativePayment ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+
+          {/* Store Status */}
+          <motion.div variants={itemVariants}>
+            <Card>
+              <div className="flex items-center gap-2 mb-5">
+                <Clock className="h-5 w-5 text-accent" />
+                <h2 className="text-base font-semibold text-foreground">
+                  Status da Loja
+                </h2>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-foreground/80">Loja aberta para pedidos?</label>
+                <button
+                  onClick={() => setForm({ ...form, isOpen: !form.isOpen })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.isOpen ? "bg-success" : "bg-muted"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${form.isOpen ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+                <span className={`text-sm font-medium ${form.isOpen ? "text-success" : "text-muted-foreground"}`}>
+                  {form.isOpen ? "Aberta" : "Fechada"}
+                </span>
               </div>
             </Card>
           </motion.div>

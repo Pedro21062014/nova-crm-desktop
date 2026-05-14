@@ -4,7 +4,6 @@ import {
   Search,
   Plus,
   ArrowUpRight,
-  ArrowDownRight,
   Filter,
   DollarSign,
   Trash2,
@@ -12,13 +11,19 @@ import {
   AlertCircle,
   X,
   Sparkles,
+  CreditCard,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Package,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
 import { type OrderItem } from "@/services/firebase";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
-// Helpers for field name compatibility
+// ── Field compatibility helpers (CRM vs old nova-crm) ──
+
 function safeStr(val: any): string {
   if (val == null) return "";
   if (typeof val === "string") return val;
@@ -33,12 +38,19 @@ function safeStr(val: any): string {
 function pName(p: any): string { return safeStr(p.nome || p.name); }
 function pPrice(p: any): number { return Number(p.preco || p.price) || 0; }
 function cName(c: any): string { return safeStr(c.nome || c.name); }
-function oClientName(o: any): string { return safeStr(o.clienteNome || o.customerName); }
-function getOrderType(o: any): "entrada" | "saida" {
-  const tipo = o.tipo || o.type;
-  if (tipo === "entrada" || tipo === "in") return "entrada";
-  if (tipo === "saida" || tipo === "out" || tipo === "expense") return "saida";
-  return "entrada";
+function oClientName(o: any): string { return safeStr(o.customerName || o.clienteNome); }
+function oPaymentMethod(o: any): string { return o.paymentMethod || o.formaPagamento || ""; }
+
+// Check if order is cancelled
+function isCancelled(o: any): boolean {
+  const status = o.status || "";
+  return status === "cancelled" || status === "cancelado";
+}
+
+// Check if order is pending
+function isPending(o: any): boolean {
+  const status = o.status || "new";
+  return status === "new" || status === "pending" || status === "pending_payment" || status === "pendente";
 }
 
 const containerVariants = {
@@ -51,38 +63,38 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
-const statusConfig: Record<string, { label: string; variant: "success" | "warning" | "danger" | "info" }> = {
-  pago: { label: "Pago", variant: "success" },
-  paid: { label: "Pago", variant: "success" },
-  pendente: { label: "Pendente", variant: "warning" },
-  pending: { label: "Pendente", variant: "warning" },
-  cancelado: { label: "Cancelado", variant: "danger" },
-  cancelled: { label: "Cancelado", variant: "danger" },
-  completed: { label: "Concluído", variant: "success" },
+// CRM status config
+const statusConfig: Record<string, { label: string; variant: "success" | "warning" | "danger" | "info"; icon: any }> = {
+  pending_payment: { label: "Pag. Pendente", variant: "warning", icon: Clock },
+  new: { label: "Novo", variant: "info", icon: Sparkles },
+  processing: { label: "Preparando", variant: "info", icon: Package },
+  completed: { label: "Concluído", variant: "success", icon: CheckCircle2 },
+  cancelled: { label: "Cancelado", variant: "danger", icon: XCircle },
+  // Old nova-crm statuses
+  pago: { label: "Pago", variant: "success", icon: CheckCircle2 },
+  paid: { label: "Pago", variant: "success", icon: CheckCircle2 },
+  pendente: { label: "Pendente", variant: "warning", icon: Clock },
+  pending: { label: "Pendente", variant: "warning", icon: Clock },
+  cancelado: { label: "Cancelado", variant: "danger", icon: XCircle },
 };
 
-type StatusFilter = "todos" | "pago" | "pendente" | "cancelado";
-type TypeFilter = "todos" | "entrada" | "saida";
+type StatusFilter = "todos" | "new" | "processing" | "completed" | "cancelled";
 
 interface OrderForm {
-  clienteId: string;
-  clienteNome: string;
-  itens: OrderItem[];
+  customerName: string;
+  items: OrderItem[];
   total: number;
   status: string;
-  tipo: string;
-  formaPagamento: string;
+  paymentMethod: string;
   observacoes: string;
 }
 
 const emptyOrder: OrderForm = {
-  clienteId: "",
-  clienteNome: "",
-  itens: [],
+  customerName: "",
+  items: [],
   total: 0,
-  status: "pendente",
-  tipo: "entrada",
-  formaPagamento: "",
+  status: "new",
+  paymentMethod: "",
   observacoes: "",
 };
 
@@ -101,7 +113,6 @@ export function OrdersPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("todos");
   const [modalOpen, setModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -112,23 +123,29 @@ export function OrdersPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const getStatus = (status: string) => {
-    return statusConfig[status] || statusConfig.pendente;
+    return statusConfig[status] || statusConfig.new;
   };
 
-  // Summary stats
+  // Summary stats matching CRM logic
   const summary = useMemo(() => {
-    const paidOrders = orders.filter((o) => o.status === "pago" || o.status === "paid" || o.status === "completed");
-    const entradas = paidOrders
-      .filter((o) => getOrderType(o) === "entrada")
-      .reduce((s, o) => s + (o.total || 0), 0);
-    const saidas = paidOrders
-      .filter((o) => getOrderType(o) === "saida")
-      .reduce((s, o) => s + (o.total || 0), 0);
+    const nonCancelled = orders.filter((o) => !isCancelled(o));
+    const faturamento = nonCancelled.reduce((s, o) => s + (o.total || 0), 0);
+
+    // Platform-paid orders (PIX/Credit Card with real paymentId)
+    const valorPago = nonCancelled.filter((o) => {
+      const method = o.paymentMethod;
+      const paymentId = o.paymentId;
+      const paymentStatus = o.paymentStatus;
+      const isNativePayment = method === "PIX" || method === "CREDIT_CARD";
+      const isPlatformManaged = isNativePayment && paymentId && !String(paymentId).startsWith("static_");
+      return isPlatformManaged && paymentStatus === "paid";
+    }).reduce((s, o) => s + (o.total || 0), 0);
+
     return {
-      entradas,
-      saidas,
-      saldo: entradas - saidas,
-      pendentes: orders.filter((o) => o.status === "pendente" || o.status === "pending" || !o.status).length,
+      faturamento,
+      valorPago,
+      pendentes: orders.filter((o) => isPending(o)).length,
+      totalPedidos: nonCancelled.length,
     };
   }, [orders]);
 
@@ -139,16 +156,12 @@ export function OrdersPage() {
 
   const filtered = orders.filter((o) => {
     const cname = oClientName(o);
-    const matchesSearch =
-      cname?.toLowerCase().includes(search.toLowerCase()) ||
-      o.observacoes?.toLowerCase().includes(search.toLowerCase());
-    const orderStatus = o.status || "pendente";
+    const matchesSearch = cname?.toLowerCase().includes(search.toLowerCase());
+    const orderStatus = o.status || "new";
     const matchesStatus = statusFilter === "todos" || orderStatus === statusFilter ||
-      (statusFilter === "pago" && orderStatus === "paid") ||
-      (statusFilter === "pendente" && (orderStatus === "pending" || !o.status)) ||
-      (statusFilter === "cancelado" && (orderStatus === "cancelled" || orderStatus === "canceled"));
-    const matchesType = typeFilter === "todos" || getOrderType(o) === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
+      (statusFilter === "new" && (orderStatus === "pending_payment" || !o.status)) ||
+      (statusFilter === "cancelled" && (orderStatus === "cancelado"));
+    return matchesSearch && matchesStatus;
   });
 
   const sorted = [...filtered].sort(
@@ -165,53 +178,56 @@ export function OrdersPage() {
   const addOrderItem = () => {
     setOrderItems([
       ...orderItems,
-      { produtoId: "", produtoNome: "", quantidade: 1, precoUnitario: 0, subtotal: 0 },
+      { productId: "", productName: "", quantity: 1, price: 0 },
     ]);
   };
 
   const updateOrderItem = (index: number, field: string, value: string | number) => {
     const updated = [...orderItems];
-    if (field === "produtoId") {
+    if (field === "productId") {
       const product = products.find((p) => p.id === value);
       updated[index] = {
         ...updated[index],
-        produtoId: value as string,
-        produtoNome: pName(product),
-        precoUnitario: pPrice(product),
-        subtotal: pPrice(product) * updated[index].quantidade,
+        productId: value as string,
+        productName: pName(product),
+        price: pPrice(product),
       };
-    } else if (field === "quantidade") {
+    } else if (field === "quantity") {
       updated[index] = {
         ...updated[index],
-        quantidade: value as number,
-        subtotal: updated[index].precoUnitario * (value as number),
+        quantity: value as number,
       };
     }
     setOrderItems(updated);
-    const total = updated.reduce((s, i) => s + i.subtotal, 0);
-    setForm({ ...form, total, itens: updated });
+    const total = updated.reduce((s, i) => s + ((i.price || i.precoUnitario || 0) * (i.quantity || i.quantidade || 1)), 0);
+    setForm({ ...form, total, items: updated });
   };
 
   const removeOrderItem = (index: number) => {
     const updated = orderItems.filter((_, i) => i !== index);
     setOrderItems(updated);
-    const total = updated.reduce((s, i) => s + i.subtotal, 0);
-    setForm({ ...form, total, itens: updated });
+    const total = updated.reduce((s, i) => s + ((i.price || i.precoUnitario || 0) * (i.quantity || i.quantidade || 1)), 0);
+    setForm({ ...form, total, items: updated });
   };
 
   const handleSave = async () => {
     setSaving(true);
     setActionError(null);
     try {
-      const client = clients.find((c) => c.id === form.clienteId);
-      const orderData = {
-        ...form,
-        clienteNome: cName(client) || "",
-        itens: orderItems,
-        total: orderItems.reduce((s, i) => s + i.subtotal, 0),
-        paymentStatus: form.status === "pago" ? "paid" : "pending",
+      const orderData: Record<string, unknown> = {
+        customerName: form.customerName,
+        items: orderItems.map(item => ({
+          productId: item.productId || item.produtoId,
+          productName: item.productName || item.produtoNome,
+          quantity: item.quantity || item.quantidade,
+          price: item.price || item.precoUnitario,
+        })),
+        total: form.total,
+        status: form.status,
+        paymentMethod: form.paymentMethod,
+        paymentStatus: "pending",
       };
-      await addOrder(orderData as Record<string, unknown>);
+      await addOrder(orderData);
       setModalOpen(false);
     } catch (err: any) {
       console.error("Erro ao criar pedido:", err);
@@ -226,12 +242,12 @@ export function OrdersPage() {
     setSaving(true);
     setActionError(null);
     try {
-      console.log(`[OrdersPage] Changing status of ${selectedOrderId} to ${newStatus}`);
-      await editOrder(selectedOrderId, {
-        status: newStatus,
-        paymentStatus: newStatus === "pago" ? "paid" : "pending",
-      });
-      console.log(`[OrdersPage] Status changed successfully`);
+      const update: Record<string, unknown> = { status: newStatus };
+      // If marking as completed, also set paymentStatus to paid
+      if (newStatus === "completed") {
+        update.paymentStatus = "paid";
+      }
+      await editOrder(selectedOrderId, update);
       setStatusModalOpen(false);
       setSelectedOrderId(null);
     } catch (err: any) {
@@ -244,7 +260,7 @@ export function OrdersPage() {
 
   const openStatusModal = (orderId: string, currentStatus: string) => {
     setSelectedOrderId(orderId);
-    setNewStatus(currentStatus || "pendente");
+    setNewStatus(currentStatus || "new");
     setActionError(null);
     setStatusModalOpen(true);
   };
@@ -254,7 +270,6 @@ export function OrdersPage() {
       setActionError(null);
       try {
         await deleteOrder(id);
-        console.log(`[OrdersPage] Order deleted successfully: ${id}`);
       } catch (err: any) {
         console.error("Erro ao excluir pedido:", err);
         setActionError(err.message || "Erro ao excluir pedido. Tente novamente.");
@@ -286,7 +301,7 @@ export function OrdersPage() {
             )}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Gestão de vendas e fluxo de caixa
+            Gestão de vendas e pedidos
           </p>
         </div>
         <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
@@ -317,42 +332,40 @@ export function OrdersPage() {
         <Card>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success-light">
-              <ArrowUpRight className="h-5 w-5 text-success" />
+              <DollarSign className="h-5 w-5 text-success" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Entradas</p>
-              <p className="text-lg font-semibold text-success">{formatCurrency(summary.entradas)}</p>
+              <p className="text-xs text-muted-foreground">Faturamento</p>
+              <p className="text-lg font-semibold text-success">{formatCurrency(summary.faturamento)}</p>
             </div>
           </div>
         </Card>
         <Card>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-danger-light">
-              <ArrowDownRight className="h-5 w-5 text-danger" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
+              <CreditCard className="h-5 w-5 text-blue-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Saídas</p>
-              <p className="text-lg font-semibold text-danger">{formatCurrency(summary.saidas)}</p>
+              <p className="text-xs text-muted-foreground">Pago (Pix/Cartão)</p>
+              <p className="text-lg font-semibold text-blue-500">{formatCurrency(summary.valorPago)}</p>
             </div>
           </div>
         </Card>
         <Card>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-light">
-              <DollarSign className="h-5 w-5 text-accent" />
+              <ShoppingCart className="h-5 w-5 text-accent" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Saldo</p>
-              <p className={cn("text-lg font-semibold", summary.saldo >= 0 ? "text-success" : "text-danger")}>
-                {formatCurrency(summary.saldo)}
-              </p>
+              <p className="text-xs text-muted-foreground">Total Pedidos</p>
+              <p className="text-lg font-semibold text-accent">{summary.totalPedidos}</p>
             </div>
           </div>
         </Card>
         <Card>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-light">
-              <ShoppingCart className="h-5 w-5 text-warning" />
+              <Clock className="h-5 w-5 text-warning" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Pendentes</p>
@@ -374,7 +387,7 @@ export function OrdersPage() {
         </div>
         <div className="flex items-center gap-1.5">
           <Filter className="h-4 w-4 text-muted-foreground mr-1" />
-          {(["todos", "pago", "pendente", "cancelado"] as StatusFilter[]).map((status) => (
+          {(["todos", "new", "processing", "completed", "cancelled"] as StatusFilter[]).map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -383,21 +396,7 @@ export function OrdersPage() {
                 statusFilter === status ? "bg-accent text-white" : "bg-muted text-muted-foreground hover:text-foreground"
               )}
             >
-              {status === "todos" ? "Todos" : statusConfig[status]?.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5">
-          {(["todos", "entrada", "saida"] as TypeFilter[]).map((type) => (
-            <button
-              key={type}
-              onClick={() => setTypeFilter(type)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                typeFilter === type ? "bg-accent text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {type === "todos" ? "Todos" : type === "entrada" ? "Entradas" : "Saídas"}
+              {status === "todos" ? "Todos" : statusConfig[status]?.label || status}
             </button>
           ))}
         </div>
@@ -422,16 +421,19 @@ export function OrdersPage() {
         <motion.div variants={containerVariants} className="space-y-3">
           {sorted.map((order) => {
             const status = getStatus(order.status);
-            const tipo = getOrderType(order);
             const cname = oClientName(order);
             const isNew = order.isNew;
+            const paymentMethod = oPaymentMethod(order);
+            const isCancelledOrder = isCancelled(order);
+
             return (
               <motion.div key={order.id} variants={itemVariants}>
                 <Card
                   hover
                   className={cn(
                     "group relative overflow-hidden",
-                    isNew && "ring-2 ring-accent/30 bg-accent-light/30"
+                    isNew && "ring-2 ring-accent/30 bg-accent-light/30",
+                    isCancelledOrder && "opacity-60"
                   )}
                 >
                   {/* New indicator strip */}
@@ -443,13 +445,13 @@ export function OrdersPage() {
                       <div
                         className={cn(
                           "flex h-10 w-10 items-center justify-center rounded-xl",
-                          tipo === "entrada" ? "bg-success-light" : "bg-danger-light"
+                          isCancelledOrder ? "bg-danger-light" : "bg-success-light"
                         )}
                       >
-                        {tipo === "entrada" ? (
-                          <ArrowUpRight className="h-5 w-5 text-success" />
+                        {isCancelledOrder ? (
+                          <XCircle className="h-5 w-5 text-danger" />
                         ) : (
-                          <ArrowDownRight className="h-5 w-5 text-danger" />
+                          <ArrowUpRight className="h-5 w-5 text-success" />
                         )}
                       </div>
                       <div>
@@ -458,9 +460,9 @@ export function OrdersPage() {
                             {cname || "Cliente"}
                           </p>
                           <Badge variant={status.variant}>{status.label}</Badge>
-                          <Badge variant={tipo === "entrada" ? "success" : "danger"}>
-                            {tipo === "entrada" ? "Entrada" : "Saída"}
-                          </Badge>
+                          {paymentMethod && (
+                            <Badge variant="info">{paymentMethod}</Badge>
+                          )}
                           {isNew && (
                             <motion.span
                               initial={{ scale: 0 }}
@@ -473,7 +475,8 @@ export function OrdersPage() {
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {order.createdAt ? formatDate(order.createdAt) : "Agora"}
-                          {order.formaPagamento && ` · ${order.formaPagamento}`}
+                          {order.discount ? ` · Desc: ${formatCurrency(order.discount)}` : ""}
+                          {order.couponCode ? ` (${order.couponCode})` : ""}
                         </p>
                       </div>
                     </div>
@@ -485,7 +488,7 @@ export function OrdersPage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => openStatusModal(order.id, order.status || "pendente")}
+                        onClick={() => openStatusModal(order.id, order.status || "new")}
                       >
                         Alterar Status
                       </Button>
@@ -519,34 +522,14 @@ export function OrdersPage() {
               {actionError}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-foreground/80">Cliente</label>
-              <select
-                value={form.clienteId}
-                onChange={(e) => setForm({ ...form, clienteId: e.target.value })}
-                className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
-              >
-                <option value="">Selecione um cliente</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{cName(c)}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-foreground/80">Tipo</label>
-              <select
-                value={form.tipo}
-                onChange={(e) => setForm({ ...form, tipo: e.target.value as "entrada" | "saida" })}
-                className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
-              >
-                <option value="entrada">Entrada</option>
-                <option value="saida">Saída</option>
-              </select>
-            </div>
-          </div>
 
           <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Nome do Cliente"
+              value={form.customerName}
+              onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+              placeholder="Nome do cliente"
+            />
             <div>
               <label className="text-sm font-medium text-foreground/80">Status</label>
               <select
@@ -554,16 +537,20 @@ export function OrdersPage() {
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
                 className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
               >
-                <option value="pendente">Pendente</option>
-                <option value="pago">Pago</option>
-                <option value="cancelado">Cancelado</option>
+                <option value="new">Novo</option>
+                <option value="processing">Preparando</option>
+                <option value="completed">Concluído</option>
+                <option value="cancelled">Cancelado</option>
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <Input
               label="Forma de Pagamento"
-              value={form.formaPagamento}
-              onChange={(e) => setForm({ ...form, formaPagamento: e.target.value })}
-              placeholder="Ex: PIX, Cartão, Dinheiro"
+              value={form.paymentMethod}
+              onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}
+              placeholder="PIX, CREDIT_CARD, Dinheiro"
             />
           </div>
 
@@ -577,8 +564,8 @@ export function OrdersPage() {
               {orderItems.map((item, i) => (
                 <div key={i} className="flex items-center gap-3 rounded-xl bg-muted p-3">
                   <select
-                    value={item.produtoId}
-                    onChange={(e) => updateOrderItem(i, "produtoId", e.target.value)}
+                    value={item.productId || item.produtoId}
+                    onChange={(e) => updateOrderItem(i, "productId", e.target.value)}
                     className="flex-1 h-9 rounded-lg border border-border bg-background px-2 text-sm"
                   >
                     <option value="">Selecione</option>
@@ -588,11 +575,13 @@ export function OrdersPage() {
                   </select>
                   <input
                     type="number" min={1}
-                    value={item.quantidade}
-                    onChange={(e) => updateOrderItem(i, "quantidade", parseInt(e.target.value) || 1)}
+                    value={item.quantity || item.quantidade}
+                    onChange={(e) => updateOrderItem(i, "quantity", parseInt(e.target.value) || 1)}
                     className="w-20 h-9 rounded-lg border border-border bg-background px-2 text-sm text-center"
                   />
-                  <span className="text-sm font-medium w-24 text-right">{formatCurrency(item.subtotal)}</span>
+                  <span className="text-sm font-medium w-24 text-right">
+                    {formatCurrency((item.price || item.precoUnitario || 0) * (item.quantity || item.quantidade || 1))}
+                  </span>
                   <button onClick={() => removeOrderItem(i)} className="text-muted-foreground hover:text-danger transition-colors">×</button>
                 </div>
               ))}
@@ -600,7 +589,7 @@ export function OrdersPage() {
             <div className="flex justify-end mt-3 pt-3 border-t border-border">
               <span className="text-sm text-muted-foreground mr-2">Total:</span>
               <span className="text-lg font-semibold text-foreground">
-                {formatCurrency(orderItems.reduce((s, i) => s + i.subtotal, 0))}
+                {formatCurrency(orderItems.reduce((s, i) => s + ((i.price || i.precoUnitario || 0) * (i.quantity || i.quantidade || 1)), 0))}
               </span>
             </div>
           </div>
@@ -643,9 +632,11 @@ export function OrdersPage() {
               onChange={(e) => setNewStatus(e.target.value)}
               className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
             >
-              <option value="pendente">Pendente</option>
-              <option value="pago">Pago</option>
-              <option value="cancelado">Cancelado</option>
+              <option value="pending_payment">Pagamento Pendente</option>
+              <option value="new">Novo</option>
+              <option value="processing">Preparando</option>
+              <option value="completed">Concluído</option>
+              <option value="cancelled">Cancelado</option>
             </select>
           </div>
           <div className="flex justify-end gap-3 pt-2">

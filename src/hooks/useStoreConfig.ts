@@ -1,14 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  subscribeMerchantRTDB,
-  getMerchantDataRTDB,
-  updateMerchantDataRTDB,
   setMerchantId,
   getMerchantId,
   type StoreConfig,
 } from "@/services/firebase";
 import { useAuth } from "@/hooks/useAuth";
-import { doc, onSnapshot, getDoc, setDoc, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 // Helper: safely convert any value to a string for form inputs
@@ -27,6 +24,57 @@ function safeStr(val: any): string {
     return "";
   }
   return String(val);
+}
+
+// Extract storeConfig from a merchant document.
+// The CRM stores config in a nested `storeConfig` field.
+// Old nova-crm stored config at the top level.
+// This function merges both sources, preferring CRM storeConfig fields.
+function extractStoreConfig(merchantData: any): StoreConfig {
+  const sc = merchantData.storeConfig || {};
+
+  return {
+    // CRM storeConfig fields (preferred)
+    storeName: sc.storeName || merchantData.nomeLoja || merchantData.name || "",
+    description: sc.description || merchantData.slogan || "",
+    category: sc.category || "",
+    whatsapp: sc.whatsapp || merchantData.redesSociais?.whatsapp || merchantData.telefone || merchantData.phone || "",
+    themeColor: sc.themeColor || "",
+    logoUrl: sc.logoUrl || merchantData.logo || "",
+    bannerUrl: sc.bannerUrl || "",
+    fullAddress: sc.fullAddress || safeStr(merchantData.endereco || merchantData.address),
+    latitude: sc.latitude,
+    longitude: sc.longitude,
+    isOpen: sc.isOpen,
+    openingHours: sc.openingHours,
+    enableNativePayment: sc.enableNativePayment,
+    pixKey: sc.pixKey || "",
+    document: sc.document || merchantData.cnpj || "",
+    isPublished: sc.isPublished,
+    allowPickup: sc.allowPickup,
+    isOnboarded: sc.isOnboarded,
+    deliverySettings: sc.deliverySettings,
+    sections: sc.sections,
+
+    // Old nova-crm fields (backward compat)
+    nomeLoja: merchantData.nomeLoja || sc.storeName || merchantData.name || "",
+    name: merchantData.name || sc.storeName || merchantData.nomeLoja || "",
+    slogan: merchantData.slogan || sc.description || "",
+    logo: merchantData.logo || sc.logoUrl || "",
+    telefone: merchantData.telefone || merchantData.phone || sc.whatsapp || "",
+    phone: merchantData.phone || merchantData.telefone || sc.whatsapp || "",
+    email: merchantData.email || "",
+    endereco: safeStr(merchantData.endereco || merchantData.address || sc.fullAddress),
+    address: safeStr(merchantData.address || merchantData.endereco || sc.fullAddress),
+    cnpj: merchantData.cnpj || sc.document || "",
+    horarioFuncionamento: merchantData.horarioFuncionamento || "",
+    redesSociais: merchantData.redesSociais || {},
+
+    // System fields
+    isSuperuser: merchantData.isSuperuser,
+    isBlocked: merchantData.isBlocked,
+    subscription: merchantData.subscription,
+  };
 }
 
 export function useStoreConfig() {
@@ -68,74 +116,41 @@ export function useStoreConfig() {
           unsubscribeRef.current = null;
         }
 
-        // ── Strategy: Try RTDB first (primary), then Firestore as fallback ──
-        // Many merchants have their config in RTDB, not Firestore
+        // ── Strategy: Subscribe directly to the merchant document in Firestore ──
+        // The CRM stores storeConfig as a nested field on the merchant document.
+        // We use onSnapshot on the merchant doc directly.
+        console.log(`[useStoreConfig] Subscribing to Firestore merchant doc: ${uid}`);
 
-        // Step 1: Try RTDB subscription
-        console.log(`[useStoreConfig] Trying RTDB subscription for merchant: ${uid}`);
+        const docRef = doc(db, "merchants", uid);
 
-        let gotData = false;
-
-        // Subscribe to RTDB merchant data
-        const rtdbUnsubscribe = subscribeMerchantRTDB<StoreConfig>(
-          (data) => {
+        const unsubscribe = onSnapshot(
+          docRef,
+          (snapshot) => {
             if (!cancelled) {
-              if (data) {
-                console.log("[useStoreConfig] Got data from RTDB:", data);
-                setConfig(data);
+              if (snapshot.exists()) {
+                const merchantData = snapshot.data();
+                console.log("[useStoreConfig] Got merchant doc data:", merchantData);
+                const storeConf = extractStoreConfig(merchantData);
+                setConfig(storeConf);
                 setLoading(false);
                 setError(null);
-                gotData = true;
-              } else if (!gotData) {
-                // RTDB returned null - try Firestore as fallback
-                console.log("[useStoreConfig] RTDB returned null, trying Firestore fallback");
-                tryFirestoreFallback(uid, cancelled, (firestoreData) => {
-                  if (!cancelled) {
-                    if (firestoreData) {
-                      console.log("[useStoreConfig] Got data from Firestore fallback:", firestoreData);
-                      setConfig(firestoreData);
-                    }
-                    setLoading(false);
-                    setError(null);
-                  }
-                });
+              } else {
+                console.log("[useStoreConfig] Merchant document does not exist");
+                setConfig(null);
+                setLoading(false);
               }
             }
           },
           (err) => {
             if (!cancelled) {
-              console.warn("[useStoreConfig] RTDB subscription failed, trying Firestore:", err);
-              // RTDB failed, try Firestore
-              tryFirestoreFallback(uid, cancelled, (firestoreData) => {
-                if (!cancelled) {
-                  if (firestoreData) {
-                    setConfig(firestoreData);
-                  }
-                  setLoading(false);
-                  setError(null);
-                }
-              });
+              console.error("[useStoreConfig] Firestore subscription error:", err);
+              setError("Erro ao carregar dados da loja.");
+              setLoading(false);
             }
           }
         );
 
-        unsubscribeRef.current = rtdbUnsubscribe;
-
-        // Set a timeout — if no data received within 3s from RTDB, try Firestore
-        setTimeout(() => {
-          if (!cancelled && !gotData) {
-            console.log("[useStoreConfig] RTDB timeout, trying Firestore fallback");
-            tryFirestoreFallback(uid, cancelled, (firestoreData) => {
-              if (!cancelled && firestoreData) {
-                console.log("[useStoreConfig] Got data from Firestore after RTDB timeout:", firestoreData);
-                setConfig(firestoreData);
-                setLoading(false);
-                setError(null);
-              }
-            });
-          }
-        }, 3000);
-
+        unsubscribeRef.current = unsubscribe;
       } catch (err) {
         if (!cancelled) {
           console.error("[useStoreConfig] Setup error:", err);
@@ -164,33 +179,55 @@ export function useStoreConfig() {
         setError(null);
         const uid = user.uid;
 
-        // Save to both RTDB and Firestore to keep them in sync
-        const sanitizedData: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(data)) {
-          sanitizedData[key] = safeStr(value) === "" && value != null && typeof value === "object"
-            ? safeStr(value)
-            : value;
-        }
+        // Build the storeConfig nested object matching CRM format
+        // Only include fields that are actually set
+        const storeConfigUpdate: Record<string, unknown> = {};
 
-        // Try RTDB first
-        try {
-          await updateMerchantDataRTDB(data);
-          console.log("[useStoreConfig] Config saved to RTDB");
-        } catch (rtdbErr) {
-          console.warn("[useStoreConfig] Failed to save to RTDB, trying Firestore:", rtdbErr);
-        }
+        if (data.storeName !== undefined) storeConfigUpdate.storeName = data.storeName;
+        if (data.description !== undefined) storeConfigUpdate.description = data.description;
+        if (data.category !== undefined) storeConfigUpdate.category = data.category;
+        if (data.whatsapp !== undefined) storeConfigUpdate.whatsapp = data.whatsapp;
+        if (data.themeColor !== undefined) storeConfigUpdate.themeColor = data.themeColor;
+        if (data.logoUrl !== undefined) storeConfigUpdate.logoUrl = data.logoUrl;
+        if (data.bannerUrl !== undefined) storeConfigUpdate.bannerUrl = data.bannerUrl;
+        if (data.fullAddress !== undefined) storeConfigUpdate.fullAddress = data.fullAddress;
+        if (data.latitude !== undefined) storeConfigUpdate.latitude = data.latitude;
+        if (data.longitude !== undefined) storeConfigUpdate.longitude = data.longitude;
+        if (data.isOpen !== undefined) storeConfigUpdate.isOpen = data.isOpen;
+        if (data.openingHours !== undefined) storeConfigUpdate.openingHours = data.openingHours;
+        if (data.enableNativePayment !== undefined) storeConfigUpdate.enableNativePayment = data.enableNativePayment;
+        if (data.pixKey !== undefined) storeConfigUpdate.pixKey = data.pixKey;
+        if (data.document !== undefined) storeConfigUpdate.document = data.document;
+        if (data.isPublished !== undefined) storeConfigUpdate.isPublished = data.isPublished;
+        if (data.allowPickup !== undefined) storeConfigUpdate.allowPickup = data.allowPickup;
+        if (data.deliverySettings !== undefined) storeConfigUpdate.deliverySettings = data.deliverySettings;
+        if (data.sections !== undefined) storeConfigUpdate.sections = data.sections;
 
-        // Also save to Firestore
-        try {
-          const docRef = doc(db, "merchants", uid);
-          await setDoc(docRef, {
-            ...data,
-            updatedAt: Timestamp.now(),
-          } as Record<string, unknown>, { merge: true });
-          console.log("[useStoreConfig] Config saved to Firestore");
-        } catch (fsErr) {
-          console.warn("[useStoreConfig] Failed to save to Firestore:", fsErr);
+        // Also handle old field names → map to storeConfig fields
+        // If user provides old field names (from the form), convert them
+        if (data.nomeLoja !== undefined && !data.storeName) storeConfigUpdate.storeName = data.nomeLoja;
+        if (data.slogan !== undefined && !data.description) storeConfigUpdate.description = data.slogan;
+        if (data.logo !== undefined && !data.logoUrl) storeConfigUpdate.logoUrl = data.logo;
+        if (data.telefone !== undefined && !data.whatsapp) storeConfigUpdate.whatsapp = data.telefone;
+        if (data.phone !== undefined && !data.whatsapp) storeConfigUpdate.whatsapp = data.phone;
+        if (data.cnpj !== undefined && !data.document) storeConfigUpdate.document = data.cnpj;
+        if (data.endereco !== undefined && !data.fullAddress) storeConfigUpdate.fullAddress = data.endereco;
+        if (data.address !== undefined && !data.fullAddress) storeConfigUpdate.fullAddress = data.address;
+        if (data.email !== undefined) storeConfigUpdate.email = data.email;
+
+        // Save to Firestore as nested storeConfig field on merchant doc
+        // Using dot notation for nested updates
+        const dotNotationUpdate: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(storeConfigUpdate)) {
+          dotNotationUpdate[`storeConfig.${key}`] = value;
         }
+        dotNotationUpdate.updatedAt = Timestamp.now();
+
+        console.log("[useStoreConfig] Saving storeConfig:", dotNotationUpdate);
+
+        const docRef = doc(db, "merchants", uid);
+        await setDoc(docRef, dotNotationUpdate, { merge: true });
+        console.log("[useStoreConfig] Config saved to Firestore");
 
       } catch (err: any) {
         console.error("[useStoreConfig] Save error:", err);
@@ -205,40 +242,4 @@ export function useStoreConfig() {
   const clearError = useCallback(() => setError(null), []);
 
   return { config, loading, error, saveConfig, clearError };
-}
-
-// Helper: try to get data from Firestore as fallback
-function tryFirestoreFallback(
-  uid: string,
-  cancelled: boolean,
-  callback: (data: StoreConfig | null) => void
-) {
-  try {
-    const docRef = doc(db, "merchants", uid);
-    const unsubscribe = onSnapshot(
-      docRef,
-      (snapshot) => {
-        if (!cancelled) {
-          if (snapshot.exists()) {
-            callback(snapshot.data() as StoreConfig);
-          } else {
-            callback(null);
-          }
-        }
-      },
-      (err) => {
-        if (!cancelled) {
-          console.warn("[useStoreConfig] Firestore fallback also failed:", err);
-          callback(null);
-        }
-      }
-    );
-    // Auto-unsubscribe after 5 seconds to avoid lingering listeners
-    setTimeout(() => {
-      unsubscribe();
-    }, 5000);
-  } catch (err) {
-    console.warn("[useStoreConfig] Firestore fallback error:", err);
-    callback(null);
-  }
 }

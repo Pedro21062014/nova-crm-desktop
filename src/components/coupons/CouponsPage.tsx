@@ -20,6 +20,35 @@ import { useCoupons } from "@/hooks/useFirebaseData";
 import { type Coupon } from "@/services/firebase";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
+// ── Field compatibility helpers (CRM vs old nova-crm) ──
+
+function getCouponCode(c: Coupon): string {
+  return c.code || c.codigo || "";
+}
+
+function getCouponType(c: Coupon): "percentage" | "fixed" {
+  const t = c.type || c.tipoDesconto;
+  if (t === "percentage" || t === "porcentagem") return "percentage";
+  if (t === "fixed" || t === "valor_fixo") return "fixed";
+  return "percentage";
+}
+
+function getCouponValue(c: Coupon): number {
+  return c.value ?? c.valorDesconto ?? 0;
+}
+
+function getCouponMinPurchase(c: Coupon): number {
+  return c.minPurchase ?? c.valorMinimo ?? 0;
+}
+
+function getCouponUsageCount(c: Coupon): number {
+  return c.usageCount ?? c.usosAtuais ?? 0;
+}
+
+function getCouponActive(c: Coupon): boolean {
+  return c.active !== undefined ? c.active : (c.ativo !== undefined ? c.ativo : true);
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.06 } },
@@ -30,16 +59,12 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
-const emptyCoupon: Omit<Coupon, "createdAt" | "updatedAt"> = {
-  codigo: "",
-  descricao: "",
-  tipoDesconto: "porcentagem",
-  valorDesconto: 0,
-  valorMinimo: 0,
-  usoMaximo: 0,
-  usosAtuais: 0,
-  validoAte: 0,
-  ativo: true,
+const emptyForm = {
+  code: "",
+  type: "percentage" as "percentage" | "fixed",
+  value: 0,
+  minPurchase: 0,
+  active: true,
 };
 
 export function CouponsPage() {
@@ -47,10 +72,10 @@ export function CouponsPage() {
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyCoupon);
+  const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"todos" | "ativos" | "expirados" | "inativos">("todos");
+  const [filter, setFilter] = useState<"todos" | "ativos" | "inativos">("todos");
 
   const filtered = useMemo(() => {
     let result = coupons;
@@ -58,16 +83,13 @@ export function CouponsPage() {
       const s = search.toLowerCase();
       result = result.filter(
         (c) =>
-          c.codigo?.toLowerCase().includes(s) ||
-          c.descricao?.toLowerCase().includes(s)
+          getCouponCode(c).toLowerCase().includes(s)
       );
     }
     if (filter === "ativos") {
-      result = result.filter((c) => c.ativo && (!c.validoAte || c.validoAte > Date.now()));
-    } else if (filter === "expirados") {
-      result = result.filter((c) => c.validoAte && c.validoAte <= Date.now());
+      result = result.filter((c) => getCouponActive(c));
     } else if (filter === "inativos") {
-      result = result.filter((c) => !c.ativo);
+      result = result.filter((c) => !getCouponActive(c));
     }
     return result;
   }, [coupons, search, filter]);
@@ -76,7 +98,7 @@ export function CouponsPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm(emptyCoupon);
+    setForm(emptyForm);
     setActionError(null);
     setModalOpen(true);
   };
@@ -84,30 +106,26 @@ export function CouponsPage() {
   const openEdit = (coupon: Coupon & { id: string }) => {
     setEditingId(coupon.id);
     setForm({
-      codigo: coupon.codigo || "",
-      descricao: coupon.descricao || "",
-      tipoDesconto: coupon.tipoDesconto || "porcentagem",
-      valorDesconto: coupon.valorDesconto || 0,
-      valorMinimo: coupon.valorMinimo || 0,
-      usoMaximo: coupon.usoMaximo || 0,
-      usosAtuais: coupon.usosAtuais || 0,
-      validoAte: coupon.validoAte || 0,
-      ativo: coupon.ativo !== undefined ? coupon.ativo : true,
+      code: getCouponCode(coupon),
+      type: getCouponType(coupon),
+      value: getCouponValue(coupon),
+      minPurchase: getCouponMinPurchase(coupon),
+      active: getCouponActive(coupon),
     });
     setActionError(null);
     setModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!form.codigo.trim()) {
+    if (!form.code.trim()) {
       setActionError("O código do cupom é obrigatório.");
       return;
     }
-    if (form.valorDesconto <= 0) {
+    if (form.value <= 0) {
       setActionError("O valor do desconto deve ser maior que zero.");
       return;
     }
-    if (form.tipoDesconto === "porcentagem" && form.valorDesconto > 100) {
+    if (form.type === "percentage" && form.value > 100) {
       setActionError("A porcentagem de desconto não pode ser maior que 100%.");
       return;
     }
@@ -115,14 +133,31 @@ export function CouponsPage() {
     setSaving(true);
     setActionError(null);
     try {
-      const data = {
-        ...form,
-        codigo: form.codigo.toUpperCase().trim(),
-        usosAtuais: form.usosAtuais || 0,
+      // Save in CRM format (matching the web app structure)
+      const data: Record<string, unknown> = {
+        code: form.code.toUpperCase().trim(),
+        type: form.type,
+        value: parseFloat(String(form.value)) || 0,
+        active: form.active,
       };
+
+      // Only include minPurchase if set
+      if (form.minPurchase > 0) {
+        data.minPurchase = parseFloat(String(form.minPurchase)) || 0;
+      } else {
+        data.minPurchase = 0;
+      }
+
       if (editingId) {
+        // When editing, preserve usageCount
+        const existing = coupons.find(c => c.id === editingId);
+        if (existing) {
+          data.usageCount = getCouponUsageCount(existing);
+        }
         await editItem(editingId, data as Partial<Record<string, unknown>>);
       } else {
+        // New coupon starts with 0 usage
+        data.usageCount = 0;
         await addItem(data as Record<string, unknown>);
       }
       setModalOpen(false);
@@ -147,7 +182,8 @@ export function CouponsPage() {
 
   const toggleActive = async (coupon: Coupon & { id: string }) => {
     try {
-      await editItem(coupon.id, { ativo: !coupon.ativo } as Partial<Record<string, unknown>>);
+      const newActive = !getCouponActive(coupon);
+      await editItem(coupon.id, { active: newActive } as Partial<Record<string, unknown>>);
     } catch (err: any) {
       setActionError(err.message || "Erro ao alterar status do cupom.");
     }
@@ -157,26 +193,12 @@ export function CouponsPage() {
     navigator.clipboard.writeText(code).catch(() => {});
   };
 
-  const isExpired = (coupon: Coupon) => coupon.validoAte ? coupon.validoAte <= Date.now() : false;
-
-  const isValid = (coupon: Coupon) => coupon.ativo && !isExpired(coupon) && (!coupon.usoMaximo || (coupon.usosAtuais || 0) < coupon.usoMaximo);
-
-  const dateToInputValue = (ms: number) => {
-    if (!ms) return "";
-    const d = new Date(ms);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
-
-  const inputValueToDate = (val: string) => {
-    if (!val) return 0;
-    return new Date(val).getTime();
-  };
+  const isValid = (coupon: Coupon) => getCouponActive(coupon);
 
   const stats = useMemo(() => ({
-    ativos: coupons.filter((c) => isValid(c)).length,
-    expirados: coupons.filter((c) => isExpired(c)).length,
-    totalUsos: coupons.reduce((s, c) => s + (c.usosAtuais || 0), 0),
+    ativos: coupons.filter((c) => getCouponActive(c)).length,
+    inativos: coupons.filter((c) => !getCouponActive(c)).length,
+    totalUsos: coupons.reduce((s, c) => s + getCouponUsageCount(c), 0),
   }), [coupons]);
 
   return (
@@ -236,11 +258,11 @@ export function CouponsPage() {
         <Card>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-light">
-              <Clock className="h-5 w-5 text-warning" />
+              <XCircle className="h-5 w-5 text-warning" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Expirados</p>
-              <p className="text-lg font-semibold text-warning">{stats.expirados}</p>
+              <p className="text-xs text-muted-foreground">Inativos</p>
+              <p className="text-lg font-semibold text-warning">{stats.inativos}</p>
             </div>
           </div>
         </Card>
@@ -268,7 +290,7 @@ export function CouponsPage() {
           />
         </div>
         <div className="flex items-center gap-1.5">
-          {(["todos", "ativos", "expirados", "inativos"] as const).map((f) => (
+          {(["todos", "ativos", "inativos"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -277,7 +299,7 @@ export function CouponsPage() {
                 filter === f ? "bg-accent text-white" : "bg-muted text-muted-foreground hover:text-foreground"
               )}
             >
-              {f === "todos" ? "Todos" : f === "ativos" ? "Ativos" : f === "expirados" ? "Expirados" : "Inativos"}
+              {f === "todos" ? "Todos" : f === "ativos" ? "Ativos" : "Inativos"}
             </button>
           ))}
         </div>
@@ -301,52 +323,56 @@ export function CouponsPage() {
       ) : (
         <motion.div variants={containerVariants} className="space-y-3">
           {sorted.map((coupon) => {
-            const expired = isExpired(coupon);
-            const valid = isValid(coupon);
+            const active = getCouponActive(coupon);
+            const couponType = getCouponType(coupon);
+            const couponValue = getCouponValue(coupon);
+            const couponCode = getCouponCode(coupon);
+            const minPurchase = getCouponMinPurchase(coupon);
+            const usageCount = getCouponUsageCount(coupon);
+
             return (
               <motion.div key={coupon.id} variants={itemVariants}>
-                <Card hover className={cn("group relative overflow-hidden", !valid && "opacity-70")}>
+                <Card hover className={cn("group relative overflow-hidden", !active && "opacity-70")}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className={cn(
                         "flex h-12 w-12 items-center justify-center rounded-xl",
-                        valid ? "bg-accent-light" : expired ? "bg-warning-light" : "bg-muted"
+                        active ? "bg-accent-light" : "bg-muted"
                       )}>
-                        {coupon.tipoDesconto === "porcentagem" ? (
-                          <Percent className={cn("h-6 w-6", valid ? "text-accent" : expired ? "text-warning" : "text-muted-foreground")} />
+                        {couponType === "percentage" ? (
+                          <Percent className={cn("h-6 w-6", active ? "text-accent" : "text-muted-foreground")} />
                         ) : (
-                          <DollarSign className={cn("h-6 w-6", valid ? "text-accent" : expired ? "text-warning" : "text-muted-foreground")} />
+                          <DollarSign className={cn("h-6 w-6", active ? "text-accent" : "text-muted-foreground")} />
                         )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-base font-bold tracking-wider text-foreground bg-muted px-2.5 py-0.5 rounded-md font-mono">
-                            {coupon.codigo || "SEM_COD"}
+                            {couponCode || "SEM_COD"}
                           </span>
-                          <Badge variant={valid ? "success" : expired ? "warning" : "danger"}>
-                            {valid ? "Ativo" : expired ? "Expirado" : "Inativo"}
+                          <Badge variant={active ? "success" : "danger"}>
+                            {active ? "Ativo" : "Inativo"}
                           </Badge>
-                          {coupon.tipoDesconto === "porcentagem" ? (
+                          {couponType === "percentage" ? (
                             <span className="text-sm font-semibold text-success">
-                              {coupon.valorDesconto}% OFF
+                              {couponValue}% OFF
                             </span>
                           ) : (
                             <span className="text-sm font-semibold text-success">
-                              {formatCurrency(coupon.valorDesconto)} OFF
+                              {formatCurrency(couponValue)} OFF
                             </span>
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {coupon.descricao || "Sem descrição"}
-                          {coupon.valorMinimo ? ` · Mínimo: ${formatCurrency(coupon.valorMinimo)}` : ""}
-                          {coupon.usoMaximo ? ` · Usos: ${coupon.usosAtuais || 0}/${coupon.usoMaximo}` : ""}
-                          {coupon.validoAte ? ` · Válido até: ${formatDate(coupon.validoAte)}` : ""}
+                          {minPurchase ? `Mínimo: ${formatCurrency(minPurchase)}` : "Sem mínimo"}
+                          {" · "}
+                          Usos: {usageCount}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => copyCode(coupon.codigo)}
+                        onClick={() => copyCode(couponCode)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                         title="Copiar código"
                       >
@@ -357,7 +383,7 @@ export function CouponsPage() {
                         variant="secondary"
                         onClick={() => toggleActive(coupon as Coupon & { id: string })}
                       >
-                        {coupon.ativo ? "Desativar" : "Ativar"}
+                        {active ? "Desativar" : "Ativar"}
                       </Button>
                       <Button
                         size="sm"
@@ -398,82 +424,56 @@ export function CouponsPage() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Código do Cupom"
-              value={form.codigo}
-              onChange={(e) => setForm({ ...form, codigo: e.target.value.toUpperCase() })}
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
               placeholder="EX: PROMO20"
               icon={<Tag className="h-4 w-4" />}
             />
             <div>
               <label className="text-sm font-medium text-foreground/80">Tipo de Desconto</label>
               <select
-                value={form.tipoDesconto}
-                onChange={(e) => setForm({ ...form, tipoDesconto: e.target.value as "porcentagem" | "valor_fixo" })}
+                value={form.type}
+                onChange={(e) => setForm({ ...form, type: e.target.value as "percentage" | "fixed" })}
                 className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
               >
-                <option value="porcentagem">Porcentagem (%)</option>
-                <option value="valor_fixo">Valor Fixo (R$)</option>
+                <option value="percentage">Porcentagem (%)</option>
+                <option value="fixed">Valor Fixo (R$)</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label={form.tipoDesconto === "porcentagem" ? "Desconto (%)" : "Desconto (R$)"}
+              label={form.type === "percentage" ? "Desconto (%)" : "Desconto (R$)"}
               type="number"
-              value={form.valorDesconto || ""}
-              onChange={(e) => setForm({ ...form, valorDesconto: parseFloat(e.target.value) || 0 })}
-              placeholder={form.tipoDesconto === "porcentagem" ? "10" : "15.90"}
-              icon={form.tipoDesconto === "porcentagem" ? <Percent className="h-4 w-4" /> : <DollarSign className="h-4 w-4" />}
+              value={form.value || ""}
+              onChange={(e) => setForm({ ...form, value: parseFloat(e.target.value) || 0 })}
+              placeholder={form.type === "percentage" ? "10" : "15.90"}
+              icon={form.type === "percentage" ? <Percent className="h-4 w-4" /> : <DollarSign className="h-4 w-4" />}
             />
             <Input
-              label="Valor Mínimo do Pedido (R$)"
+              label="Pedido Mínimo (R$) (0 = sem mínimo)"
               type="number"
-              value={form.valorMinimo || ""}
-              onChange={(e) => setForm({ ...form, valorMinimo: parseFloat(e.target.value) || 0 })}
+              value={form.minPurchase || ""}
+              onChange={(e) => setForm({ ...form, minPurchase: parseFloat(e.target.value) || 0 })}
               placeholder="0.00"
               icon={<DollarSign className="h-4 w-4" />}
             />
           </div>
 
-          <Input
-            label="Descrição"
-            value={form.descricao}
-            onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-            placeholder="Descrição do cupom (opcional)"
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Uso Máximo (0 = ilimitado)"
-              type="number"
-              value={form.usoMaximo || ""}
-              onChange={(e) => setForm({ ...form, usoMaximo: parseInt(e.target.value) || 0 })}
-              placeholder="0"
-            />
-            <div>
-              <label className="text-sm font-medium text-foreground/80">Válido Até (vazio = sem limite)</label>
-              <input
-                type="datetime-local"
-                value={dateToInputValue(form.validoAte || 0)}
-                onChange={(e) => setForm({ ...form, validoAte: inputValueToDate(e.target.value) })}
-                className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
-              />
-            </div>
-          </div>
-
           <div className="flex items-center gap-3">
             <label className="text-sm font-medium text-foreground/80">Cupom ativo?</label>
             <button
-              onClick={() => setForm({ ...form, ativo: !form.ativo })}
+              onClick={() => setForm({ ...form, active: !form.active })}
               className={cn(
                 "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                form.ativo ? "bg-accent" : "bg-muted"
+                form.active ? "bg-accent" : "bg-muted"
               )}
             >
               <span
                 className={cn(
                   "inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm",
-                  form.ativo ? "translate-x-6" : "translate-x-1"
+                  form.active ? "translate-x-6" : "translate-x-1"
                 )}
               />
             </button>

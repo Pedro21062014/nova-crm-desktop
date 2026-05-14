@@ -11,19 +11,23 @@ import {
 import { toMs, type Order } from "@/services/firebase";
 
 // Helpers for field name compatibility
-function getOrderType(o: any): "entrada" | "saida" {
-  const tipo = o.tipo || o.type;
-  if (tipo === "entrada" || tipo === "in") return "entrada";
-  if (tipo === "saida" || tipo === "out" || tipo === "expense") return "saida";
-  return "entrada";
-}
-
 function getOrderStatus(o: any): string {
-  return o.status || "pendente";
+  return o.status || "new";
 }
 
-function isPaid(status: string): boolean {
-  return status === "pago" || status === "paid" || status === "completed";
+// Check if order is cancelled
+function isCancelled(o: any): boolean {
+  return getOrderStatus(o) === "cancelled";
+}
+
+// Check if order is a platform-managed paid payment
+function isPlatformPaid(o: any): boolean {
+  const method = o.paymentMethod;
+  const paymentId = o.paymentId;
+  const paymentStatus = o.paymentStatus;
+  const isNativePayment = method === "PIX" || method === "CREDIT_CARD";
+  const isPlatformManaged = isNativePayment && paymentId && !String(paymentId).startsWith("static_");
+  return isPlatformManaged && paymentStatus === "paid";
 }
 
 interface WeeklyChartProps {
@@ -45,18 +49,20 @@ export function WeeklyChart({ orders }: WeeklyChartProps) {
       return ts >= dayStart && ts <= dayEnd;
     });
 
-    const entradas = dayOrders
-      .filter((o) => getOrderType(o) === "entrada" && isPaid(getOrderStatus(o)))
+    // Faturamento = sum of total for non-cancelled orders (matching CRM)
+    const faturamento = dayOrders
+      .filter((o) => !isCancelled(o))
       .reduce((s, o) => s + (o.total || 0), 0);
 
-    const saidas = dayOrders
-      .filter((o) => getOrderType(o) === "saida" && isPaid(getOrderStatus(o)))
+    // Valor Pago = platform-managed paid payments only
+    const valorPago = dayOrders
+      .filter((o) => isPlatformPaid(o))
       .reduce((s, o) => s + (o.total || 0), 0);
 
     return {
       name: days[date.getDay()],
-      Entradas: entradas,
-      Saídas: saidas,
+      Faturamento: faturamento,
+      "Pago (Pix/Cartão)": valorPago,
     };
   });
 
@@ -102,13 +108,13 @@ export function WeeklyChart({ orders }: WeeklyChartProps) {
           wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }}
         />
         <Bar
-          dataKey="Entradas"
+          dataKey="Faturamento"
           fill="var(--color-accent)"
           radius={[6, 6, 0, 0]}
           maxBarSize={32}
         />
         <Bar
-          dataKey="Saídas"
+          dataKey="Pago (Pix/Cartão)"
           fill="var(--color-border)"
           radius={[6, 6, 0, 0]}
           maxBarSize={32}
