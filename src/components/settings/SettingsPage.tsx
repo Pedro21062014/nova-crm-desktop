@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Store, Save, Phone, Mail, Clock, Camera, Globe2, MessageCircle, AlertCircle, X, CheckCircle2, MapPin, CreditCard, Key } from "lucide-react";
+import { Store, Save, Phone, Mail, Clock, Camera, Globe2, MessageCircle, AlertCircle, X, CheckCircle2, MapPin, CreditCard, Key, Upload } from "lucide-react";
 import { Card, Button, Input, Skeleton } from "@/components/ui";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
 import { type StoreConfig } from "@/services/firebase";
@@ -21,6 +21,16 @@ function safeStr(val: any): string {
     return "";
   }
   return String(val);
+}
+
+// Convert File to base64 data URI (matching CRM storage format)
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 const containerVariants = {
@@ -51,6 +61,10 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   // Merge config into form whenever it changes
   useEffect(() => {
@@ -91,11 +105,72 @@ export function SettingsPage() {
     }
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setLocalError("Por favor, selecione uma imagem válida.");
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setLocalError("A imagem deve ter no máximo 2MB.");
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const base64 = await fileToBase64(file);
+      setForm({ ...form, logoUrl: base64 });
+    } catch (err) {
+      setLocalError("Erro ao carregar a imagem.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setLocalError("Por favor, selecione uma imagem válida.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setLocalError("A imagem deve ter no máximo 2MB.");
+      return;
+    }
+
+    setUploadingBanner(true);
+    try {
+      const base64 = await fileToBase64(file);
+      setForm({ ...form, bannerUrl: base64 });
+    } catch (err) {
+      setLocalError("Erro ao carregar a imagem.");
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
+
+  const removeLogo = () => {
+    setForm({ ...form, logoUrl: "" });
+  };
+
+  const removeBanner = () => {
+    setForm({ ...form, bannerUrl: "" });
+  };
+
   // Derive display values (prefer CRM field names, fallback to old)
   const storeName = form.storeName || config?.nomeLoja || config?.name || "";
   const description = form.description || config?.slogan || "";
   const whatsapp = form.whatsapp || config?.telefone || config?.phone || "";
   const logoUrl = form.logoUrl || config?.logo || "";
+  const bannerUrl = form.bannerUrl || "";
   const fullAddress = form.fullAddress || safeStr(config?.endereco || config?.address);
   const document_ = form.document || config?.cnpj || "";
   const pixKey = form.pixKey || "";
@@ -108,15 +183,29 @@ export function SettingsPage() {
       animate="show"
       className="p-8 space-y-8 max-w-3xl"
     >
-      {/* Header */}
+      {/* Header with logo */}
       <motion.div variants={itemVariants} className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Minha Loja
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Informações e configurações da sua loja
-          </p>
+        <div className="flex items-center gap-4">
+          {/* Store Logo in header */}
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted overflow-hidden shrink-0">
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="Logo"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <Store className="h-7 w-7 text-muted-foreground" />
+            )}
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {storeName || "Minha Loja"}
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Informações e configurações da sua loja
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {saved && (
@@ -194,12 +283,105 @@ export function SettingsPage() {
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="Uma frase que representa seu negócio"
                 />
-                <Input
-                  label="URL do Logo"
-                  value={logoUrl}
-                  onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
-                  placeholder="https://... ou base64"
-                />
+
+                {/* Logo Upload */}
+                <div>
+                  <label className="text-sm font-medium text-foreground/80">Logo da Loja</label>
+                  <div className="mt-2 flex items-center gap-4">
+                    {/* Logo preview */}
+                    <div className="relative group">
+                      <div className="h-20 w-20 rounded-2xl bg-muted border-2 border-dashed border-border overflow-hidden flex items-center justify-center">
+                        {logoUrl ? (
+                          <img
+                            src={logoUrl}
+                            alt="Logo"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <Camera className="h-8 w-8 text-muted-foreground/40" />
+                        )}
+                      </div>
+                      {logoUrl && (
+                        <button
+                          onClick={removeLogo}
+                          className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-white shadow-sm hover:bg-danger/80 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Upload button */}
+                    <div className="flex-1">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        variant="secondary"
+                        icon={<Upload className="h-4 w-4" />}
+                        onClick={() => logoInputRef.current?.click()}
+                        loading={uploadingLogo}
+                      >
+                        {logoUrl ? "Trocar Logo" : "Enviar Logo"}
+                      </Button>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        PNG, JPG ou WEBP. Máximo 2MB.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Banner Upload */}
+                <div>
+                  <label className="text-sm font-medium text-foreground/80">Banner da Loja</label>
+                  <div className="mt-2 space-y-3">
+                    {/* Banner preview */}
+                    <div className="relative group">
+                      <div className="h-28 w-full rounded-2xl bg-muted border-2 border-dashed border-border overflow-hidden flex items-center justify-center">
+                        {bannerUrl ? (
+                          <img
+                            src={bannerUrl}
+                            alt="Banner"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center gap-1">
+                            <Camera className="h-8 w-8 text-muted-foreground/40" />
+                            <span className="text-xs text-muted-foreground/60">Banner</span>
+                          </div>
+                        )}
+                      </div>
+                      {bannerUrl && (
+                        <button
+                          onClick={removeBanner}
+                          className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-danger/90 text-white shadow-sm hover:bg-danger transition-colors"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Upload button */}
+                    <input
+                      ref={bannerInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBannerUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      variant="secondary"
+                      icon={<Upload className="h-4 w-4" />}
+                      onClick={() => bannerInputRef.current?.click()}
+                      loading={uploadingBanner}
+                    >
+                      {bannerUrl ? "Trocar Banner" : "Enviar Banner"}
+                    </Button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="text-sm font-medium text-foreground/80">Categoria</label>
                   <select

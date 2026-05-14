@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Plus, Package, Edit2, Trash2, X } from "lucide-react";
+import { Search, Plus, Package, Edit2, Trash2, X, Upload, Camera } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useProducts } from "@/hooks/useFirebaseData";
 import { type Product } from "@/services/firebase";
@@ -35,6 +35,16 @@ function pImage(p: any): string { return p.imagem || p.image || p.imageUrl || ""
 function pStock(p: any): number { return p.estoque || p.stock || p.quantity || 0; }
 function pActive(p: any): boolean { return p.ativo !== false && p.active !== false; }
 
+// Convert File to base64 data URI (matching CRM storage format)
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ProductsPage() {
   const { items: products, loading, addItem, editItem, deleteItem } = useProducts();
   const [search, setSearch] = useState("");
@@ -43,6 +53,8 @@ export function ProductsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyProduct);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const categories = ["Todos", ...Array.from(new Set(products.map((p) => pCategory(p)).filter(Boolean)))];
 
@@ -74,6 +86,35 @@ export function ProductsPage() {
     setModalOpen(true);
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const base64 = await fileToBase64(file);
+      setForm({ ...form, imagem: base64 });
+    } catch (err) {
+      console.error("Erro ao carregar imagem:", err);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const removeImage = () => {
+    setForm({ ...form, imagem: "" });
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -95,6 +136,8 @@ export function ProductsPage() {
       await deleteItem(id);
     }
   };
+
+  const formImage = form.imagem;
 
   return (
     <motion.div
@@ -248,6 +291,59 @@ export function ProductsPage() {
         size="lg"
       >
         <div className="space-y-4">
+          {/* Image Upload */}
+          <div>
+            <label className="text-sm font-medium text-foreground/80">Imagem do Produto</label>
+            <div className="mt-2 flex items-start gap-4">
+              {/* Image preview */}
+              <div className="relative group shrink-0">
+                <div className="h-28 w-28 rounded-2xl bg-muted border-2 border-dashed border-border overflow-hidden flex items-center justify-center">
+                  {formImage ? (
+                    <img
+                      src={formImage}
+                      alt="Preview"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1">
+                      <Camera className="h-8 w-8 text-muted-foreground/40" />
+                      <span className="text-[10px] text-muted-foreground/60">Sem imagem</span>
+                    </div>
+                  )}
+                </div>
+                {formImage && (
+                  <button
+                    onClick={removeImage}
+                    className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-white shadow-sm hover:bg-danger/80 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              {/* Upload controls */}
+              <div className="flex-1 pt-1">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="secondary"
+                  icon={<Upload className="h-4 w-4" />}
+                  onClick={() => imageInputRef.current?.click()}
+                  loading={uploadingImage}
+                >
+                  {formImage ? "Trocar Imagem" : "Enviar Imagem"}
+                </Button>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  PNG, JPG ou WEBP. Máximo 2MB. A imagem será salva junto com o produto.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Nome do Produto"
@@ -278,12 +374,6 @@ export function ProductsPage() {
               placeholder="0"
             />
           </div>
-          <Input
-            label="URL da Imagem"
-            value={form.imagem}
-            onChange={(e) => setForm({ ...form, imagem: e.target.value })}
-            placeholder="https://..."
-          />
           <div>
             <label className="text-sm font-medium text-foreground/80">Descrição</label>
             <textarea
