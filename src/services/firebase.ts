@@ -11,6 +11,7 @@ import {
   query,
   limit,
   where,
+  orderBy,
   Timestamp,
   type Unsubscribe,
   type DocumentData,
@@ -28,6 +29,7 @@ import {
   onChildAdded,
   onChildChanged,
   orderByChild,
+  serverTimestamp as rtdbServerTimestamp,
   limitToLast,
   query as rtdbQuery,
   type Unsubscribe as RtdbUnsubscribe,
@@ -496,29 +498,82 @@ export async function updateMerchantDataRTDB<T>(data: Partial<T>): Promise<void>
   }
 }
 
-// ── Chat (Realtime Database) ──
+// ── Chat (Hybrid: Firestore for conversations + RTDB for messages) ──
+//
+// The CRM web app stores chat conversation metadata in Firestore at
+// merchants/{uid}/chats (subcollection), and messages in RTDB at
+// merchants/{uid}/chats/{chatId}/messages.
+// We need to read from BOTH to be compatible with the CRM.
 
+// Message as stored in RTDB by the CRM
 export interface ChatMessage {
   id?: string;
   text: string;
-  senderId: string;
-  senderName: string;
-  senderRole: "merchant" | "customer";
-  timestamp: number;
+  sender: "merchant" | "customer"; // CRM uses simple string, not complex object
+  senderId?: string;   // Optional: nova-crm may store this
+  senderName?: string; // Optional: nova-crm may store this
+  senderRole?: "merchant" | "customer"; // Optional: nova-crm field
+  timestamp?: number;  // Optional: nova-crm field
+  createdAt?: any;     // RTDB serverTimestamp from CRM
   read?: boolean;
 }
 
+// Conversation as stored in Firestore by the CRM
 export interface ChatConversation {
   id?: string;
   customerName: string;
+  customerId?: string;    // CRM stores this
   customerPhone?: string;
   lastMessage?: string;
-  lastMessageTime?: number;
+  lastMessageSender?: "merchant" | "customer"; // CRM field
+  lastMessageTime?: number;  // nova-crm field
+  updatedAt?: any;           // Firestore Timestamp from CRM
   unreadCount?: number;
 }
 
-// Subscribe to chat conversations list
-export function subscribeChats(
+// Subscribe to chat conversations list from Firestore
+// The CRM stores conversations in Firestore at merchants/{uid}/chats
+export function subscribeChatsFirestore(
+  callback: (chats: ChatConversation[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  if (!_merchantId) {
+    if (onError) onError(new Error("Usuário não autenticado"));
+    return () => {};
+  }
+
+  try {
+    const path = ensureMerchantPath();
+    console.log(`[Firestore] Subscribing to chats at ${path}/chats`);
+    const colRef = collection(db, path, "chats");
+    const q = query(colRef, orderBy("updatedAt", "desc"));
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const chatList: ChatConversation[] = [];
+        snapshot.forEach((doc) => {
+          // Filter out the AI chat doc
+          if (doc.id !== "ai") {
+            chatList.push({ id: doc.id, ...doc.data() } as ChatConversation);
+          }
+        });
+        callback(chatList);
+      },
+      (error) => {
+        console.error("[Firestore] Error subscribing to chats:", error);
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    console.error("[Firestore] Error setting up chat subscription:", err);
+    if (onError) onError(err instanceof Error ? err : new Error(String(err)));
+    return () => {};
+  }
+}
+
+// Subscribe to chat conversations list from RTDB (fallback)
+export function subscribeChatsRTDB(
   callback: (chats: Record<string, ChatConversation> | null) => void,
   onError?: (error: Error) => void
 ): RtdbUnsubscribe {
@@ -545,7 +600,7 @@ export function subscribeChats(
   );
 }
 
-// Subscribe to messages in a specific chat
+// Subscribe to messages in a specific chat (RTDB)
 export function subscribeChatMessages(
   chatId: string,
   callback: (messages: Record<string, ChatMessage> | null) => void,
@@ -574,7 +629,7 @@ export function subscribeChatMessages(
   );
 }
 
-// Send a chat message
+// Send a chat message (compatible with CRM format)
 export async function sendChatMessage(
   chatId: string,
   message: Omit<ChatMessage, "id">
@@ -584,17 +639,29 @@ export async function sendChatMessage(
     const messagesRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}/messages`);
     const newMsgRef = rtdbPush(messagesRef);
     await rtdbSet(newMsgRef, {
-      ...message,
-      timestamp: Date.now(),
-      read: false,
+      text: message.text,
+      sender: message.sender || message.senderRole || "merchant",
+      createdAt: rtdbServerTimestamp(),
     });
 
-    // Update conversation metadata
-    const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
-    await rtdbUpdate(chatRef, {
-      lastMessage: message.text,
-      lastMessageTime: Date.now(),
-    } as Record<string, unknown>);
+    // Update Firestore conversation metadata
+    const chatDocRef = doc(db, ensureMerchantPath(), "chats", chatId);
+    try {
+      await updateDoc(chatDocRef, {
+        lastMessage: message.text,
+        lastMessageSender: "merchant",
+        updatedAt: Timestamp.now(),
+      } as Record<string, unknown>);
+    } catch (fsErr: any) {
+      // Firestore update failed, try RTDB update
+      console.warn("[Chat] Firestore update failed, trying RTDB:", fsErr);
+      const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
+      await rtdbUpdate(chatRef, {
+        lastMessage: message.text,
+        lastMessageSender: "merchant",
+        lastMessageTime: Date.now(),
+      } as Record<string, unknown>);
+    }
 
     return newMsgRef.key || "";
   } catch (err: any) {
@@ -603,34 +670,77 @@ export async function sendChatMessage(
   }
 }
 
-// Create a new chat conversation
+// Create a new chat conversation (Firestore, compatible with CRM)
 export async function createChatConversation(
   conversation: Omit<ChatConversation, "id">
 ): Promise<string> {
   if (!_merchantId) throw new Error("Usuário não autenticado");
   try {
-    const chatsRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats`);
-    const newChatRef = rtdbPush(chatsRef);
-    await rtdbSet(newChatRef, {
-      ...conversation,
-      lastMessageTime: Date.now(),
-      unreadCount: 0,
+    // Create in Firestore (primary, where CRM stores it)
+    const path = ensureMerchantPath();
+    const colRef = collection(db, path, "chats");
+    const docRef = await addDoc(colRef, {
+      customerName: conversation.customerName,
+      customerId: conversation.customerId || "",
+      customerPhone: conversation.customerPhone || "",
+      lastMessage: "",
+      lastMessageSender: "merchant" as const,
+      updatedAt: Timestamp.now(),
     });
-    console.log("[RTDB] Chat conversation created:", newChatRef.key);
-    return newChatRef.key || "";
-  } catch (err: any) {
-    console.error("[RTDB] Error creating chat:", err);
-    throw new Error(`Erro ao criar conversa: ${err.message || err}`);
+    console.log("[Firestore] Chat conversation created:", docRef.id);
+    return docRef.id;
+  } catch (fsErr: any) {
+    // Firestore failed, try RTDB as fallback
+    console.warn("[Chat] Firestore create failed, trying RTDB:", fsErr);
+    try {
+      const chatsRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats`);
+      const newChatRef = rtdbPush(chatsRef);
+      await rtdbSet(newChatRef, {
+        ...conversation,
+        lastMessageTime: Date.now(),
+        unreadCount: 0,
+      });
+      console.log("[RTDB] Chat conversation created:", newChatRef.key);
+      return newChatRef.key || "";
+    } catch (rtdbErr: any) {
+      console.error("[RTDB] Error creating chat:", rtdbErr);
+      throw new Error(`Erro ao criar conversa: ${rtdbErr.message || rtdbErr}`);
+    }
   }
 }
 
 // Mark messages as read
 export async function markChatAsRead(chatId: string): Promise<void> {
   if (!_merchantId) throw new Error("Usuário não autenticado");
+  // Try Firestore first, then RTDB
   try {
+    const chatDocRef = doc(db, ensureMerchantPath(), "chats", chatId);
+    await updateDoc(chatDocRef, { unreadCount: 0 } as Record<string, unknown>);
+  } catch {
+    try {
+      const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
+      await rtdbUpdate(chatRef, { unreadCount: 0 } as Record<string, unknown>);
+    } catch (err: any) {
+      console.error("[Chat] Error marking chat as read:", err);
+    }
+  }
+}
+
+// Delete a chat conversation
+export async function deleteChatConversation(chatId: string): Promise<void> {
+  if (!_merchantId) throw new Error("Usuário não autenticado");
+  try {
+    // Delete from Firestore
+    const chatDocRef = doc(db, ensureMerchantPath(), "chats", chatId);
+    await deleteDoc(chatDocRef);
+  } catch (fsErr) {
+    console.warn("[Chat] Firestore delete failed:", fsErr);
+  }
+  try {
+    // Also delete RTDB messages
     const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
-    await rtdbUpdate(chatRef, { unreadCount: 0 } as Record<string, unknown>);
-  } catch (err: any) {
-    console.error("[RTDB] Error marking chat as read:", err);
+    await rtdbRemove(chatRef);
+  } catch (rtdbErr) {
+    console.warn("[Chat] RTDB delete failed:", rtdbErr);
   }
 }

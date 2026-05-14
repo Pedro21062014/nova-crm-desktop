@@ -9,14 +9,14 @@ import {
   User,
   CheckCircle2,
   AlertCircle,
-  X,
-  Clock,
+  Trash2,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
-import { useChats, useChatMessages } from "@/hooks/useChat";
+import { useChats, useChatMessages, getMsgTime, isMerchantMessage } from "@/hooks/useChat";
 import { useClients } from "@/hooks/useFirebaseData";
 import { type ChatConversation } from "@/services/firebase";
 import { formatDate, cn } from "@/lib/utils";
+import { toMs } from "@/services/firebase";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -43,8 +43,26 @@ function safeStr(val: any): string {
 function cName(c: any): string { return safeStr(c.nome || c.name); }
 function cPhone(c: any): string { return safeStr(c.telefone || c.phone); }
 
+/**
+ * Get the display name for a conversation.
+ * CRM stores `customerName`, some may have different field names.
+ */
+function getConvName(conv: ChatConversation): string {
+  return conv.customerName || "Cliente";
+}
+
+/**
+ * Get the last message time as a number for sorting and display.
+ * CRM uses `updatedAt` (Firestore Timestamp), nova-crm uses `lastMessageTime` (number).
+ */
+function getConvTime(conv: ChatConversation): number {
+  if (conv.updatedAt) return toMs(conv.updatedAt);
+  if (conv.lastMessageTime) return conv.lastMessageTime;
+  return 0;
+}
+
 export function ChatPage() {
-  const { conversations, loading, createChat, markRead, error: chatsError, clearError } = useChats();
+  const { conversations, loading, createChat, deleteChat, markRead, error: chatsError, clearError } = useChats();
   const { items: clients } = useClients();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -56,14 +74,14 @@ export function ChatPage() {
   const filtered = useMemo(() => {
     if (!search) return conversations;
     return conversations.filter((c) =>
-      c.customerName?.toLowerCase().includes(search.toLowerCase()) ||
-      c.customerPhone?.includes(search)
+      getConvName(c).toLowerCase().includes(search.toLowerCase()) ||
+      (c.customerPhone || "").includes(search)
     );
   }, [conversations, search]);
 
   // Sort by last message time (most recent first)
   const sorted = useMemo(() =>
-    [...filtered].sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0)),
+    [...filtered].sort((a, b) => getConvTime(b) - getConvTime(a)),
     [filtered]
   );
 
@@ -85,7 +103,8 @@ export function ChatPage() {
         customerName: newChatForm.customerName,
         customerPhone: newChatForm.customerPhone,
         lastMessage: "",
-        lastMessageTime: Date.now(),
+        lastMessageSender: "merchant",
+        updatedAt: Date.now(),
         unreadCount: 0,
       });
       setModalOpen(false);
@@ -95,6 +114,16 @@ export function ChatPage() {
       setActionError(err.message || "Erro ao criar conversa");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteChat = async (chatId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm("Deseja excluir esta conversa permanentemente?")) {
+      await deleteChat(chatId);
+      if (selectedChatId === chatId) {
+        setSelectedChatId(null);
+      }
     }
   };
 
@@ -145,51 +174,61 @@ export function ChatPage() {
             </div>
           ) : (
             <div className="space-y-1">
-              {sorted.map((conv) => (
-                <button
-                  key={conv.id}
-                  onClick={() => handleSelectChat(conv.id!)}
-                  className={cn(
-                    "w-full text-left rounded-xl p-3 transition-all duration-200",
-                    selectedChatId === conv.id
-                      ? "bg-accent-light border border-accent/20"
-                      : "hover:bg-muted"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium",
-                        selectedChatId === conv.id
-                          ? "bg-accent text-white"
-                          : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {conv.customerName?.charAt(0)?.toUpperCase() || "?"}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {conv.customerName || "Cliente"}
-                        </p>
-                        {conv.unreadCount && conv.unreadCount > 0 ? (
-                          <span className="inline-flex items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
-                            {conv.unreadCount}
-                          </span>
-                        ) : null}
+              {sorted.map((conv) => {
+                const name = getConvName(conv);
+                return (
+                  <button
+                    key={conv.id}
+                    onClick={() => handleSelectChat(conv.id!)}
+                    className={cn(
+                      "w-full text-left rounded-xl p-3 transition-all duration-200 group",
+                      selectedChatId === conv.id
+                        ? "bg-accent-light border border-accent/20"
+                        : "hover:bg-muted"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={cn(
+                          "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium",
+                          selectedChatId === conv.id
+                            ? "bg-accent text-white"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {name.charAt(0)?.toUpperCase() || "?"}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {conv.lastMessage || "Sem mensagens"}
-                      </p>
-                      {conv.lastMessageTime ? (
-                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                          {formatDate(conv.lastMessageTime)}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {name}
+                          </p>
+                          {conv.unreadCount && conv.unreadCount > 0 ? (
+                            <span className="inline-flex items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              {conv.unreadCount}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {conv.lastMessage || "Sem mensagens"}
                         </p>
-                      ) : null}
+                        {getConvTime(conv) > 0 && (
+                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                            {formatDate(getConvTime(conv))}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteChat(conv.id!, e)}
+                        className="p-1.5 text-muted-foreground/40 hover:text-danger rounded-full opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        title="Excluir conversa"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -198,7 +237,7 @@ export function ChatPage() {
       {/* Right Panel - Chat Messages */}
       <div className="flex-1 flex flex-col">
         {selectedChatId ? (
-          <ChatView chatId={selectedChatId} />
+          <ChatView chatId={selectedChatId} conversations={conversations} />
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <MessageSquare className="h-14 w-14 text-muted-foreground/20" />
@@ -282,9 +321,8 @@ export function ChatPage() {
 
 // ── Chat View (messages area) ──
 
-function ChatView({ chatId }: { chatId: string }) {
+function ChatView({ chatId, conversations }: { chatId: string; conversations: ChatConversation[] }) {
   const { messages, loading, sendMessage } = useChatMessages(chatId);
-  const { conversations } = useChats();
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -304,7 +342,7 @@ function ChatView({ chatId }: { chatId: string }) {
     if (!inputText.trim()) return;
     setSending(true);
     try {
-      await sendMessage(inputText.trim(), "Loja");
+      await sendMessage(inputText.trim());
       setInputText("");
       inputRef.current?.focus();
     } catch (err: any) {
@@ -321,7 +359,7 @@ function ChatView({ chatId }: { chatId: string }) {
     }
   };
 
-  const chatName = currentChat?.customerName || "Cliente";
+  const chatName = getConvName(currentChat || {} as ChatConversation);
   const chatPhone = currentChat?.customerPhone;
 
   return (
@@ -359,7 +397,9 @@ function ChatView({ chatId }: { chatId: string }) {
           </div>
         ) : (
           messages.map((msg) => {
-            const isMerchant = msg.senderRole === "merchant";
+            const isMerchant = isMerchantMessage(msg);
+            // For customer messages, show the customer name from the conversation
+            const senderDisplay = isMerchant ? "Você" : (chatName || "Cliente");
             return (
               <motion.div
                 key={msg.id}
@@ -377,14 +417,14 @@ function ChatView({ chatId }: { chatId: string }) {
                   )}
                 >
                   {!isMerchant && (
-                    <p className={cn("text-xs font-medium mb-0.5", isMerchant ? "text-white/70" : "text-muted-foreground")}>
-                      {msg.senderName || "Cliente"}
+                    <p className="text-xs font-medium mb-0.5 text-muted-foreground">
+                      {senderDisplay}
                     </p>
                   )}
                   <p className="text-sm leading-relaxed">{msg.text}</p>
                   <div className={cn("flex items-center gap-1 mt-1", isMerchant ? "justify-end" : "")}>
                     <span className={cn("text-[10px]", isMerchant ? "text-white/60" : "text-muted-foreground/60")}>
-                      {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : ""}
+                      {formatMsgTime(msg)}
                     </span>
                     {isMerchant && msg.read && (
                       <CheckCircle2 className="h-3 w-3 text-white/60" />
@@ -422,4 +462,14 @@ function ChatView({ chatId }: { chatId: string }) {
       </div>
     </>
   );
+}
+
+/**
+ * Format a message timestamp for display.
+ * Handles both CRM (`createdAt`) and nova-crm (`timestamp`) formats.
+ */
+function formatMsgTime(msg: any): string {
+  const ms = getMsgTime(msg);
+  if (!ms) return "";
+  return new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
