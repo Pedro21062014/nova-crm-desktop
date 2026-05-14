@@ -11,7 +11,6 @@ import {
   query,
   limit,
   where,
-  orderBy,
   Timestamp,
   type Unsubscribe,
   type DocumentData,
@@ -109,7 +108,9 @@ export function subscribe<T>(
   onError?: (error: Error) => void
 ): Unsubscribe {
   const colRef = collection(db, merchantPath(), subcollection);
-  const q = query(colRef, orderBy("createdAt", "desc"));
+  // No orderBy — avoids missing docs that don't have createdAt field yet
+  // Sorting is done client-side
+  const q = query(colRef);
 
   return onSnapshot(
     q,
@@ -275,7 +276,21 @@ export const COLLECTIONS = {
   ORDERS: "orders",
   COUPONS: "coupons",
   NOTIFICATIONS: "notifications",
+  SCHEDULED_MESSAGES: "scheduledMessages",
 } as const;
+
+// ── Scheduled Message (WhatsApp integration) ──
+
+export interface ScheduledMessage {
+  titulo: string;
+  mensagem: string;
+  destinatario: string;
+  dataHora: number;          // ms timestamp for when to send
+  recorrencia: "unica" | "diario" | "semanal" | "mensal";
+  status: "agendada" | "enviada" | "falhou";
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
+}
 
 // Helper to convert Firestore Timestamp to milliseconds
 export function toMs(ts: Timestamp | number | undefined): number {

@@ -10,6 +10,7 @@ import {
   type Product,
   type Client,
   type Order,
+  type ScheduledMessage,
   COLLECTIONS,
 } from "@/services/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -141,4 +142,8 @@ export function useClients() {
 
 export function useOrders() {
   return useFirebaseList<Order>(COLLECTIONS.ORDERS);
+}
+
+export function useScheduledMessages() {
+  return useFirebaseList<ScheduledMessage>(COLLECTIONS.SCHEDULED_MESSAGES);
 }

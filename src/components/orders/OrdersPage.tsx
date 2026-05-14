@@ -7,15 +7,12 @@ import {
   ArrowDownRight,
   Filter,
   DollarSign,
-  TrendingDown,
+  Trash2,
   ShoppingCart,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
-import {
-  type Order,
-  type OrderItem,
-} from "@/services/firebase";
+import { type OrderItem } from "@/services/firebase";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
 // Helpers for field name compatibility
@@ -23,6 +20,12 @@ function pName(p: any): string { return p.nome || p.name || ""; }
 function pPrice(p: any): number { return p.preco || p.price || 0; }
 function cName(c: any): string { return c.nome || c.name || ""; }
 function oClientName(o: any): string { return o.clienteNome || o.customerName || ""; }
+function getOrderType(o: any): "entrada" | "saida" {
+  const tipo = o.tipo || o.type;
+  if (tipo === "entrada" || tipo === "in") return "entrada";
+  if (tipo === "saida" || tipo === "out" || tipo === "expense") return "saida";
+  return "entrada";
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -70,7 +73,7 @@ const emptyOrder: OrderForm = {
 };
 
 export function OrdersPage() {
-  const { items: orders, loading: ordersLoading, addItem: addOrder, editItem: editOrder } = useOrders();
+  const { items: orders, loading: ordersLoading, addItem: addOrder, editItem: editOrder, deleteItem: deleteOrder } = useOrders();
   const { items: clients } = useClients();
   const { items: products } = useProducts();
 
@@ -78,26 +81,20 @@ export function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("todos");
   const [modalOpen, setModalOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [newStatus, setNewStatus] = useState("");
   const [form, setForm] = useState<OrderForm>(emptyOrder);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Normalize order status for display
   const getStatus = (status: string) => {
     return statusConfig[status] || statusConfig.pendente;
   };
 
-  // Normalize order type
-  const getOrderType = (order: any): "entrada" | "saida" => {
-    const tipo = order.tipo || order.type;
-    if (tipo === "entrada" || tipo === "in") return "entrada";
-    if (tipo === "saida" || tipo === "out" || tipo === "expense") return "saida";
-    return "entrada";
-  };
-
   // Summary stats
   const summary = useMemo(() => {
-    const paidOrders = orders.filter((o) => o.status === "pago" || o.status === "paid");
+    const paidOrders = orders.filter((o) => o.status === "pago" || o.status === "paid" || o.status === "completed");
     const entradas = paidOrders
       .filter((o) => getOrderType(o) === "entrada")
       .reduce((s, o) => s + (o.total || 0), 0);
@@ -108,7 +105,7 @@ export function OrdersPage() {
       entradas,
       saidas,
       saldo: entradas - saidas,
-      pendentes: orders.filter((o) => o.status === "pendente" || o.status === "pending").length,
+      pendentes: orders.filter((o) => o.status === "pendente" || o.status === "pending" || !o.status).length,
     };
   }, [orders]);
 
@@ -118,9 +115,9 @@ export function OrdersPage() {
       cname?.toLowerCase().includes(search.toLowerCase()) ||
       o.observacoes?.toLowerCase().includes(search.toLowerCase());
     const orderStatus = o.status || "pendente";
-    const matchesStatus = statusFilter === "todos" || orderStatus === statusFilter || 
+    const matchesStatus = statusFilter === "todos" || orderStatus === statusFilter ||
       (statusFilter === "pago" && orderStatus === "paid") ||
-      (statusFilter === "pendente" && orderStatus === "pending") ||
+      (statusFilter === "pendente" && (orderStatus === "pending" || !o.status)) ||
       (statusFilter === "cancelado" && (orderStatus === "cancelled" || orderStatus === "canceled"));
     const matchesType = typeFilter === "todos" || getOrderType(o) === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
@@ -139,13 +136,7 @@ export function OrdersPage() {
   const addOrderItem = () => {
     setOrderItems([
       ...orderItems,
-      {
-        produtoId: "",
-        produtoNome: "",
-        quantidade: 1,
-        precoUnitario: 0,
-        subtotal: 0,
-      },
+      { produtoId: "", produtoNome: "", quantidade: 1, precoUnitario: 0, subtotal: 0 },
     ]);
   };
 
@@ -199,8 +190,30 @@ export function OrdersPage() {
     }
   };
 
-  const handleStatusChange = async (id: string, status: string) => {
-    await editOrder(id, { status, paymentStatus: status === "pago" ? "paid" : "pending" });
+  const handleStatusChange = async () => {
+    if (!selectedOrderId) return;
+    setSaving(true);
+    try {
+      await editOrder(selectedOrderId, { status: newStatus, paymentStatus: newStatus === "pago" ? "paid" : "pending" });
+      setStatusModalOpen(false);
+      setSelectedOrderId(null);
+    } catch (err) {
+      console.error("Erro ao alterar status:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openStatusModal = (orderId: string, currentStatus: string) => {
+    setSelectedOrderId(orderId);
+    setNewStatus(currentStatus || "pendente");
+    setStatusModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm("Tem certeza que deseja excluir este pedido?")) {
+      await deleteOrder(id);
+    }
   };
 
   return (
@@ -232,9 +245,7 @@ export function OrdersPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Entradas</p>
-              <p className="text-lg font-semibold text-success">
-                {formatCurrency(summary.entradas)}
-              </p>
+              <p className="text-lg font-semibold text-success">{formatCurrency(summary.entradas)}</p>
             </div>
           </div>
         </Card>
@@ -245,9 +256,7 @@ export function OrdersPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Saídas</p>
-              <p className="text-lg font-semibold text-danger">
-                {formatCurrency(summary.saidas)}
-              </p>
+              <p className="text-lg font-semibold text-danger">{formatCurrency(summary.saidas)}</p>
             </div>
           </div>
         </Card>
@@ -289,22 +298,18 @@ export function OrdersPage() {
         </div>
         <div className="flex items-center gap-1.5">
           <Filter className="h-4 w-4 text-muted-foreground mr-1" />
-          {(["todos", "pago", "pendente", "cancelado"] as StatusFilter[]).map(
-            (status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                  statusFilter === status
-                    ? "bg-accent text-white"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {status === "todos" ? "Todos" : statusConfig[status]?.label}
-              </button>
-            )
-          )}
+          {(["todos", "pago", "pendente", "cancelado"] as StatusFilter[]).map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors capitalize",
+                statusFilter === status ? "bg-accent text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {status === "todos" ? "Todos" : statusConfig[status]?.label}
+            </button>
+          ))}
         </div>
         <div className="flex items-center gap-1.5">
           {(["todos", "entrada", "saida"] as TypeFilter[]).map((type) => (
@@ -313,9 +318,7 @@ export function OrdersPage() {
               onClick={() => setTypeFilter(type)}
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                typeFilter === type
-                  ? "bg-accent text-white"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
+                typeFilter === type ? "bg-accent text-white" : "bg-muted text-muted-foreground hover:text-foreground"
               )}
             >
               {type === "todos" ? "Todos" : type === "entrada" ? "Entradas" : "Saídas"}
@@ -335,6 +338,9 @@ export function OrdersPage() {
         <div className="flex flex-col items-center justify-center py-20">
           <ShoppingCart className="h-12 w-12 text-muted-foreground/30" />
           <p className="mt-4 text-sm text-muted-foreground">Nenhum pedido encontrado</p>
+          <Button variant="secondary" className="mt-4" onClick={openCreate}>
+            Criar primeiro pedido
+          </Button>
         </div>
       ) : (
         <motion.div variants={containerVariants} className="space-y-3">
@@ -350,9 +356,7 @@ export function OrdersPage() {
                       <div
                         className={cn(
                           "flex h-10 w-10 items-center justify-center rounded-xl",
-                          tipo === "entrada"
-                            ? "bg-success-light"
-                            : "bg-danger-light"
+                          tipo === "entrada" ? "bg-success-light" : "bg-danger-light"
                         )}
                       >
                         {tipo === "entrada" ? (
@@ -372,33 +376,30 @@ export function OrdersPage() {
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {order.createdAt ? formatDate(order.createdAt) : "—"}
+                          {order.createdAt ? formatDate(order.createdAt) : "Agora"}
                           {order.formaPagamento && ` · ${order.formaPagamento}`}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       <span className="text-lg font-semibold text-foreground">
                         {formatCurrency(order.total || 0)}
                       </span>
-                      {(order.status === "pendente" || order.status === "pending") && (
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleStatusChange(order.id, "pago")}
-                          >
-                            Marcar Pago
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleStatusChange(order.id, "cancelado")}
-                          >
-                            Cancelar
-                          </Button>
-                        </div>
-                      )}
+                      {/* Status change button — ALWAYS visible */}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openStatusModal(order.id, order.status || "pendente")}
+                      >
+                        Alterar Status
+                      </Button>
+                      {/* Delete button — ALWAYS visible */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        onClick={() => handleDelete(order.id)}
+                      />
                     </div>
                   </div>
                 </Card>
@@ -426,9 +427,7 @@ export function OrdersPage() {
               >
                 <option value="">Selecione um cliente</option>
                 {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {cName(c)}
-                  </option>
+                  <option key={c.id} value={c.id}>{cName(c)}</option>
                 ))}
               </select>
             </div>
@@ -436,9 +435,7 @@ export function OrdersPage() {
               <label className="text-sm font-medium text-foreground/80">Tipo</label>
               <select
                 value={form.tipo}
-                onChange={(e) =>
-                  setForm({ ...form, tipo: e.target.value as "entrada" | "saida" })
-                }
+                onChange={(e) => setForm({ ...form, tipo: e.target.value as "entrada" | "saida" })}
                 className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
               >
                 <option value="entrada">Entrada</option>
@@ -452,9 +449,7 @@ export function OrdersPage() {
               <label className="text-sm font-medium text-foreground/80">Status</label>
               <select
                 value={form.status}
-                onChange={(e) =>
-                  setForm({ ...form, status: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
                 className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
               >
                 <option value="pendente">Pendente</option>
@@ -474,9 +469,7 @@ export function OrdersPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-foreground/80">Itens do Pedido</label>
-              <Button size="sm" variant="secondary" onClick={addOrderItem}>
-                + Item
-              </Button>
+              <Button size="sm" variant="secondary" onClick={addOrderItem}>+ Item</Button>
             </div>
             <div className="space-y-2">
               {orderItems.map((item, i) => (
@@ -488,29 +481,17 @@ export function OrdersPage() {
                   >
                     <option value="">Selecione</option>
                     {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {pName(p)} - {formatCurrency(pPrice(p))}
-                      </option>
+                      <option key={p.id} value={p.id}>{pName(p)} - {formatCurrency(pPrice(p))}</option>
                     ))}
                   </select>
                   <input
-                    type="number"
-                    min={1}
+                    type="number" min={1}
                     value={item.quantidade}
-                    onChange={(e) =>
-                      updateOrderItem(i, "quantidade", parseInt(e.target.value) || 1)
-                    }
+                    onChange={(e) => updateOrderItem(i, "quantidade", parseInt(e.target.value) || 1)}
                     className="w-20 h-9 rounded-lg border border-border bg-background px-2 text-sm text-center"
                   />
-                  <span className="text-sm font-medium w-24 text-right">
-                    {formatCurrency(item.subtotal)}
-                  </span>
-                  <button
-                    onClick={() => removeOrderItem(i)}
-                    className="text-muted-foreground hover:text-danger transition-colors"
-                  >
-                    ×
-                  </button>
+                  <span className="text-sm font-medium w-24 text-right">{formatCurrency(item.subtotal)}</span>
+                  <button onClick={() => removeOrderItem(i)} className="text-muted-foreground hover:text-danger transition-colors">×</button>
                 </div>
               ))}
             </div>
@@ -527,19 +508,41 @@ export function OrdersPage() {
             <textarea
               value={form.observacoes}
               onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-              placeholder="Observações (opcional)"
-              rows={2}
+              placeholder="Observações (opcional)" rows={2}
               className="mt-1.5 flex w-full rounded-xl border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all resize-none"
             />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSave} loading={saving}>
-              Criar Pedido
-            </Button>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSave} loading={saving}>Criar Pedido</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Change Status Modal */}
+      <Modal
+        open={statusModalOpen}
+        onClose={() => setStatusModalOpen(false)}
+        title="Alterar Status do Pedido"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-foreground/80">Novo Status</label>
+            <select
+              value={newStatus}
+              onChange={(e) => setNewStatus(e.target.value)}
+              className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
+            >
+              <option value="pendente">Pendente</option>
+              <option value="pago">Pago</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setStatusModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleStatusChange} loading={saving}>Salvar</Button>
           </div>
         </div>
       </Modal>

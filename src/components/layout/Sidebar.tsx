@@ -9,6 +9,7 @@ import {
   Settings,
   ChevronLeft,
   LogOut,
+  MessageCircle,
 } from "lucide-react";
 import logoSvg from "/logo.svg";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,6 +20,7 @@ const navItems = [
   { icon: Package, label: "Produtos", path: "/produtos" },
   { icon: Users, label: "Clientes", path: "/clientes" },
   { icon: ShoppingCart, label: "Pedidos", path: "/pedidos" },
+  { icon: MessageCircle, label: "WhatsApp", path: "/whatsapp" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 
