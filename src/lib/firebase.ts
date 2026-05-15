@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
@@ -18,6 +18,19 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
+
+// Enable Firestore offline persistence so data is saved locally when offline
+enableIndexedDbPersistence(db)
+  .then(() => console.log("[Firestore] Offline persistence enabled"))
+  .catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('[Firestore] Persistence failed: multiple tabs open. Only one tab can persist data.');
+    } else if (err.code === 'unimplemented') {
+      console.warn('[Firestore] Persistence not available in this browser.');
+    } else {
+      console.warn('[Firestore] Persistence error:', err);
+    }
+  });
 
 // Set the correct persistence for Electron
 async function initAuthPersistence() {
