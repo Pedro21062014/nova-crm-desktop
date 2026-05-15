@@ -25,3 +25,22 @@ Stage Summary:
 - Receita calculada corretamente (status !== cancelled, paymentStatus === paid)
 - Minha Loja lê do storeConfig aninhado e salva com dot notation
 - Build v1.8.0 (.deb) publicado no GitHub
+---
+Task ID: 1
+Agent: Main Agent
+Task: Implement offline/online status indicator and create v1.9.1 release
+
+Work Log:
+- Explored existing codebase: useOnlineStatus.ts, OfflineBanner.tsx, AppLayout.tsx already had the feature implemented
+- Improved useOnlineStatus hook: replaced fixed 2-second timeout with Firebase's `waitForPendingWrites` for real sync detection
+- Added fallback of 3 seconds if waitForPendingWrites fails
+- Enabled Firestore offline persistence (`enableIndexedDbPersistence`) in lib/firebase.ts for true local data saving
+- Added OfflineBanner to layout/index.ts barrel exports
+- Bumped version from 1.9.0 to 1.9.1 in package.json
+- Built Linux .deb and Windows .zip packages
+- Pushed to GitHub, created tag v1.9.1, and released with both assets
+
+Stage Summary:
+- v1.9.1 released at https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v1.9.1
+- Key improvements: real Firebase sync detection instead of timeout, Firestore offline persistence enabled
+- Files: nova-crm_1.9.1_amd64.deb, Nova-CRM-1.9.1-win-x64.zip
