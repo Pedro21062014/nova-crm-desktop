@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Store, Save, Phone, Clock, Camera, MessageCircle, AlertCircle, X, CheckCircle2,
-  MapPin, CreditCard, Key, Upload, Settings, ImageIcon, Search, Loader2,
-  LayoutGrid, GripVertical, Eye, Globe2, Palette, Trash2,
+  MapPin, CreditCard, Key, Settings, ImageIcon, Search, Loader2,
+  LayoutGrid, GripVertical, Eye, Globe2, Palette, Trash2, Copy, Type,
+  ShoppingBag, Image, Sparkles, ChevronDown, ChevronUp, Plus, ExternalLink,
+  Tag, FileText, PhoneCall, Upload,
 } from "lucide-react";
 import { Card, Button, Input, Skeleton } from "@/components/ui";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
@@ -43,25 +45,33 @@ type TabKey = "geral" | "horarios" | "pagamento" | "construtor";
 
 interface StoreSection {
   id: string;
-  type: "hero" | "products" | "text";
+  type: "hero" | "products" | "text" | "image";
   title?: string;
+  emoji?: string;
   content?: string;
   backgroundColor?: string;
   textColor?: string;
   imageUrl?: string;
   filterCategory?: string;
+  layout?: "grid" | "list";
 }
 
 // ── Animation Variants ──
 
 const containerVariants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
 };
 
 const itemVariants = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+};
+
+const sectionVariants = {
+  hidden: { opacity: 0, height: 0 },
+  show: { opacity: 1, height: "auto", transition: { duration: 0.25 } },
+  exit: { opacity: 0, height: 0, transition: { duration: 0.2 } },
 };
 
 // ── Default Values ──
@@ -86,6 +96,103 @@ const dayLabels: Record<string, string> = {
   sabado: "Sábado",
 };
 
+const categories = [
+  { value: "Alimentação", label: "Alimentação" },
+  { value: "Beleza", label: "Beleza" },
+  { value: "Casa", label: "Casa" },
+  { value: "Eletrônicos", label: "Eletrônicos" },
+  { value: "Farmácia", label: "Farmácia" },
+  { value: "Mercado", label: "Mercado" },
+  { value: "Moda", label: "Moda" },
+  { value: "Pet Shop", label: "Pet Shop" },
+  { value: "Saúde", label: "Saúde" },
+  { value: "Serviços", label: "Serviços" },
+  { value: "Tecnologia", label: "Tecnologia" },
+  { value: "Outros", label: "Outros" },
+];
+
+const presetColors = [
+  "#4f46e5", "#7c3aed", "#db2777", "#dc2626",
+  "#ea580c", "#ca8a04", "#16a34a", "#0d9488",
+  "#0284c7", "#1e293b",
+];
+
+const sectionEmojis = ["", "🔥", "⭐", "🎉", "🛒", "🎁", "📍", "💪", "✨", "🏆", "💎", "🚀"];
+
+// ── Toggle Switch Component ──
+
+function ToggleSwitch({ checked, onChange, disabled }: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onChange}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        checked ? "bg-success" : "bg-muted"
+      } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+    >
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${
+        checked ? "translate-x-6" : "translate-x-1"
+      }`} />
+    </button>
+  );
+}
+
+// ── Section Card (collapsible) ──
+
+function SectionCard({
+  title,
+  icon,
+  children,
+  defaultOpen = true,
+  badge,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  badge?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between w-full text-left"
+      >
+        <div className="flex items-center gap-2">
+          {icon}
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          {badge}
+        </div>
+        {open ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            variants={sectionVariants}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="overflow-hidden"
+          >
+            <div className="pt-4 mt-4 border-t border-border">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
+  );
+}
+
 // ── Main Component ──
 
 export function SettingsPage() {
@@ -99,8 +206,11 @@ export function SettingsPage() {
   // Image upload states
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [uploadingHeroImage, setUploadingHeroImage] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const heroImageInputRef = useRef<HTMLInputElement>(null);
+  const [editingHeroId, setEditingHeroId] = useState<string | null>(null);
 
   // Address search states
   const [addressQuery, setAddressQuery] = useState("");
@@ -134,6 +244,7 @@ export function SettingsPage() {
         isPublished: config.isPublished ?? false,
         openingHours: config.openingHours || defaultOpeningHours,
         sections: config.sections || [],
+        allowPickup: config.allowPickup ?? true,
       });
     }
   }, [config]);
@@ -141,7 +252,7 @@ export function SettingsPage() {
   // ── Save handler ──
   const handleSave = async () => {
     if (form.enableNativePayment && (!form.pixKey || !form.document)) {
-      setLocalError("Você habilitou o Pagamento Nativo (PIX), mas não configurou sua Chave PIX ou CPF/CNPJ. Preencha os dados antes de salvar.");
+      setLocalError("Voce habilitou o Pagamento Nativo (PIX), mas nao configurou sua Chave PIX ou CPF/CNPJ. Preencha os dados antes de salvar.");
       return;
     }
     setSaving(true);
@@ -152,8 +263,8 @@ export function SettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
-      console.error("Erro ao salvar configurações:", err);
-      setLocalError(err.message || "Erro ao salvar configurações.");
+      console.error("Erro ao salvar configuracoes:", err);
+      setLocalError(err.message || "Erro ao salvar configuracoes.");
     } finally {
       setSaving(false);
     }
@@ -173,7 +284,7 @@ export function SettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
-      setLocalError(err.message || "Erro ao alterar status de publicação.");
+      setLocalError(err.message || "Erro ao alterar status de publicacao.");
     } finally {
       setSaving(false);
     }
@@ -183,8 +294,8 @@ export function SettingsPage() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) { setLocalError("Selecione uma imagem válida."); return; }
-    if (file.size > 2 * 1024 * 1024) { setLocalError("A imagem deve ter no máximo 2MB."); return; }
+    if (!file.type.startsWith("image/")) { setLocalError("Selecione uma imagem valida."); return; }
+    if (file.size > 2 * 1024 * 1024) { setLocalError("A imagem deve ter no maximo 2MB."); return; }
     setUploadingLogo(true);
     try {
       const base64 = await fileToBase64(file);
@@ -196,14 +307,27 @@ export function SettingsPage() {
   const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) { setLocalError("Selecione uma imagem válida."); return; }
-    if (file.size > 2 * 1024 * 1024) { setLocalError("A imagem deve ter no máximo 2MB."); return; }
+    if (!file.type.startsWith("image/")) { setLocalError("Selecione uma imagem valida."); return; }
+    if (file.size > 2 * 1024 * 1024) { setLocalError("A imagem deve ter no maximo 2MB."); return; }
     setUploadingBanner(true);
     try {
       const base64 = await fileToBase64(file);
       setForm({ ...form, bannerUrl: base64 });
     } catch { setLocalError("Erro ao carregar a imagem."); }
     finally { setUploadingBanner(false); }
+  };
+
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, sectionId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setLocalError("Selecione uma imagem valida."); return; }
+    if (file.size > 5 * 1024 * 1024) { setLocalError("A imagem deve ter no maximo 5MB."); return; }
+    setUploadingHeroImage(true);
+    try {
+      const base64 = await fileToBase64(file);
+      updateSection(sectionId, { imageUrl: base64 });
+    } catch { setLocalError("Erro ao carregar a imagem."); }
+    finally { setUploadingHeroImage(false); }
   };
 
   // ── Address search (Photon API) ──
@@ -225,7 +349,7 @@ export function SettingsPage() {
         return { display_name: parts.join(", "), lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
       });
       setAddressResults(results);
-    } catch { setLocalError("Erro ao buscar endereço."); }
+    } catch { setLocalError("Erro ao buscar endereco."); }
     finally { setSearchingAddress(false); }
   };
 
@@ -236,7 +360,7 @@ export function SettingsPage() {
   };
 
   const getMyLocation = () => {
-    if (!navigator.geolocation) { setLocalError("Geolocalização não suportada."); return; }
+    if (!navigator.geolocation) { setLocalError("Geolocalizacao nao suportada."); return; }
     setLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -262,7 +386,7 @@ export function SettingsPage() {
           setForm({ ...form, latitude: lat, longitude: lon, fullAddress: `Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}` });
         } finally { setLoadingLocation(false); }
       },
-      () => { setLocalError("Erro ao obter localização."); setLoadingLocation(false); },
+      () => { setLocalError("Erro ao obter localizacao."); setLoadingLocation(false); },
       { enableHighAccuracy: true }
     );
   };
@@ -270,14 +394,15 @@ export function SettingsPage() {
   // ── Construtor helpers ──
   const sections = (form.sections || []) as StoreSection[];
 
-  const addSection = (type: "hero" | "products" | "text") => {
+  const addSection = (type: StoreSection["type"]) => {
     const newSection: StoreSection = {
       id: Date.now().toString(),
       type,
-      title: type === "hero" ? "Novo Banner" : type === "products" ? "Nossos Produtos" : "Nova Seção de Texto",
-      content: type === "text" ? "Clique para editar este texto..." : "Subtítulo do banner",
-      backgroundColor: "#ffffff",
-      textColor: "#000000",
+      title: type === "hero" ? "Novo Banner" : type === "products" ? "Nossos Produtos" : type === "image" ? "Galeria" : "Nova Secao de Texto",
+      content: type === "text" ? "Clique para editar este texto..." : type === "hero" ? "Subtitulo do banner" : "",
+      backgroundColor: type === "hero" ? "" : "#ffffff",
+      textColor: type === "hero" ? "#ffffff" : "#000000",
+      layout: type === "products" ? "grid" : undefined,
     };
     setForm({ ...form, sections: [...sections, newSection] });
     setActiveSectionId(newSection.id);
@@ -290,6 +415,17 @@ export function SettingsPage() {
   const removeSection = (id: string) => {
     setForm({ ...form, sections: sections.filter(s => s.id !== id) });
     if (activeSectionId === id) setActiveSectionId(null);
+  };
+
+  const duplicateSection = (id: string) => {
+    const section = sections.find(s => s.id === id);
+    if (!section) return;
+    const newSection = { ...section, id: Date.now().toString(), title: `${section.title || "Secao"} (copia)` };
+    const idx = sections.findIndex(s => s.id === id);
+    const newSections = [...sections];
+    newSections.splice(idx + 1, 0, newSection);
+    setForm({ ...form, sections: newSections });
+    setActiveSectionId(newSection.id);
   };
 
   const handleDragStart = (index: number) => setDraggedItem(index);
@@ -312,12 +448,32 @@ export function SettingsPage() {
   const themeColor = form.themeColor || "#4f46e5";
 
   // ── Tab definitions ──
-  const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-    { key: "geral", label: "Geral", icon: <Settings className="h-3.5 w-3.5" /> },
-    { key: "horarios", label: "Horários", icon: <Clock className="h-3.5 w-3.5" /> },
-    { key: "pagamento", label: "Pagamento", icon: <CreditCard className="h-3.5 w-3.5" /> },
-    { key: "construtor", label: "Construtor", icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+  const tabs: { key: TabKey; label: string; icon: React.ReactNode; desc: string }[] = [
+    { key: "geral", label: "Geral", icon: <Settings className="h-3.5 w-3.5" />, desc: "Identidade e informacoes" },
+    { key: "horarios", label: "Horarios", icon: <Clock className="h-3.5 w-3.5" />, desc: "Funcionamento" },
+    { key: "pagamento", label: "Pagamento", icon: <CreditCard className="h-3.5 w-3.5" />, desc: "PIX e recebimentos" },
+    { key: "construtor", label: "Construtor", icon: <LayoutGrid className="h-3.5 w-3.5" />, desc: "Monte sua loja" },
   ];
+
+  const sectionTypeIcon = (type: StoreSection["type"]) => {
+    switch (type) {
+      case "hero": return <Camera className="h-4 w-4 text-accent shrink-0" />;
+      case "products": return <ShoppingBag className="h-4 w-4 text-success shrink-0" />;
+      case "text": return <Type className="h-4 w-4 text-warning shrink-0" />;
+      case "image": return <Image className="h-4 w-4 text-blue-500 shrink-0" />;
+      default: return <LayoutGrid className="h-4 w-4 text-muted-foreground shrink-0" />;
+    }
+  };
+
+  const sectionTypeLabel = (type: StoreSection["type"]) => {
+    switch (type) {
+      case "hero": return "Banner";
+      case "products": return "Produtos";
+      case "text": return "Texto";
+      case "image": return "Imagem";
+      default: return type;
+    }
+  };
 
   return (
     <motion.div
@@ -329,16 +485,16 @@ export function SettingsPage() {
       {/* ── Header ── */}
       <motion.div variants={itemVariants} className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted overflow-hidden shrink-0">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl overflow-hidden shrink-0" style={{ backgroundColor: logoUrl ? "transparent" : themeColor + "20" }}>
             {logoUrl ? (
               <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
             ) : (
-              <Store className="h-7 w-7 text-muted-foreground" />
+              <Store className="h-7 w-7" style={{ color: themeColor }} />
             )}
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">{storeName}</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">Configurações da sua loja</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Configuracoes da sua loja</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -353,7 +509,7 @@ export function SettingsPage() {
             }`}
           >
             <Globe2 className="h-4 w-4 inline mr-1.5" />
-            {form.isPublished ? "Publicada" : "Não publicada"}
+            {form.isPublished ? "Publicada" : "Nao publicada"}
           </button>
           {saved && (
             <motion.span
@@ -367,6 +523,52 @@ export function SettingsPage() {
           <Button icon={<Save className="h-4 w-4" />} onClick={handleSave} loading={saving}>
             Salvar
           </Button>
+        </div>
+      </motion.div>
+
+      {/* ── Status Cards ── */}
+      <motion.div variants={itemVariants} className="grid grid-cols-4 gap-3">
+        <div className="bg-card rounded-xl border border-border p-3 flex items-center gap-3">
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${form.isPublished ? "bg-success-light" : "bg-muted"}`}>
+            <Globe2 className={`h-4 w-4 ${form.isPublished ? "text-success" : "text-muted-foreground"}`} />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Status</p>
+            <p className={`text-sm font-semibold ${form.isPublished ? "text-success" : "text-muted-foreground"}`}>
+              {form.isPublished ? "Publicada" : "Oculta"}
+            </p>
+          </div>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-3 flex items-center gap-3">
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${form.isOpen ? "bg-success-light" : "bg-muted"}`}>
+            <Store className={`h-4 w-4 ${form.isOpen ? "text-success" : "text-muted-foreground"}`} />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Loja</p>
+            <p className={`text-sm font-semibold ${form.isOpen ? "text-success" : "text-muted-foreground"}`}>
+              {form.isOpen ? "Aberta" : "Fechada"}
+            </p>
+          </div>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-3 flex items-center gap-3">
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${form.enableNativePayment ? "bg-success-light" : "bg-muted"}`}>
+            <CreditCard className={`h-4 w-4 ${form.enableNativePayment ? "text-success" : "text-muted-foreground"}`} />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Pagamento</p>
+            <p className={`text-sm font-semibold ${form.enableNativePayment ? "text-success" : "text-muted-foreground"}`}>
+              {form.enableNativePayment ? "Ativo" : "Inativo"}
+            </p>
+          </div>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-3 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: themeColor + "20" }}>
+            <LayoutGrid className="h-4 w-4" style={{ color: themeColor }} />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Secoes</p>
+            <p className="text-sm font-semibold text-foreground">{sections.length}</p>
+          </div>
         </div>
       </motion.div>
 
@@ -400,6 +602,7 @@ export function SettingsPage() {
                   ? "bg-card text-accent shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
+              title={tab.desc}
             >
               {tab.icon}
               {tab.label}
@@ -419,54 +622,17 @@ export function SettingsPage() {
         <AnimatePresence mode="wait">
           {/* ──── GERAL TAB ──── */}
           {activeTab === "geral" && (
-            <motion.div key="geral" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-6">
-              {/* Informações Básicas */}
-              <Card>
-                <div className="flex items-center gap-2 mb-5">
-                  <Store className="h-5 w-5 text-accent" />
-                  <h2 className="text-base font-semibold text-foreground">Informações Básicas</h2>
-                </div>
+            <motion.div key="geral" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
+
+              {/* Identidade da Loja */}
+              <SectionCard
+                title="Identidade da Loja"
+                icon={<Store className="h-5 w-5 text-accent" />}
+                defaultOpen={true}
+              >
                 <div className="space-y-4">
                   <Input label="Nome da Loja" value={form.storeName || ""} onChange={e => setForm({ ...form, storeName: e.target.value })} placeholder="Minha Loja" />
-                  <Input label="Descrição / Slogan" value={form.description || ""} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Uma frase que representa seu negócio" />
-
-                  {/* Logo + Banner side by side */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-foreground/80">Logo da Loja</label>
-                      <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-xl cursor-pointer hover:bg-muted/50 transition-colors relative overflow-hidden mt-1.5">
-                        {logoUrl ? (
-                          <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-muted-foreground">
-                            {uploadingLogo ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
-                            <span className="text-[10px] mt-1 font-medium">{uploadingLogo ? "Enviando..." : "Upload Logo"}</span>
-                          </div>
-                        )}
-                        <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
-                      </label>
-                      {logoUrl && (
-                        <button onClick={() => setForm({ ...form, logoUrl: "" })} className="text-[10px] text-danger font-bold mt-1 hover:underline w-full text-center">Remover Logo</button>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-foreground/80">Capa (Banner)</label>
-                      <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-xl cursor-pointer hover:bg-muted/50 transition-colors relative overflow-hidden mt-1.5">
-                        {bannerUrl ? (
-                          <img src={bannerUrl} alt="Banner" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-muted-foreground">
-                            {uploadingBanner ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImageIcon className="h-5 w-5" />}
-                            <span className="text-[10px] mt-1 font-medium">{uploadingBanner ? "Enviando..." : "Upload Capa"}</span>
-                          </div>
-                        )}
-                        <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={uploadingBanner} />
-                      </label>
-                      {bannerUrl && (
-                        <button onClick={() => setForm({ ...form, bannerUrl: "" })} className="text-[10px] text-danger font-bold mt-1 hover:underline w-full text-center">Remover Capa</button>
-                      )}
-                    </div>
-                  </div>
+                  <Input label="Descricao / Slogan" value={form.description || ""} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Uma frase que representa seu negocio" />
 
                   {/* Categoria */}
                   <div>
@@ -477,17 +643,77 @@ export function SettingsPage() {
                       className="mt-1.5 flex h-10 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
                     >
                       <option value="">Selecione uma categoria...</option>
-                      <option value="Eletrônicos">Eletrônicos</option>
-                      <option value="Moda">Moda</option>
-                      <option value="Casa">Casa</option>
-                      <option value="Beleza">Beleza</option>
-                      <option value="Serviços">Serviços</option>
-                      <option value="Alimentação">Alimentação</option>
-                      <option value="Outros">Outros</option>
+                      {categories.map(c => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
                     </select>
                   </div>
+                </div>
+              </SectionCard>
 
-                  {/* WhatsApp */}
+              {/* Midia (Logo + Banner) */}
+              <SectionCard
+                title="Midia"
+                icon={<Camera className="h-5 w-5 text-accent" />}
+                defaultOpen={true}
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground/80">Logo da Loja</label>
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer hover:bg-muted/50 transition-colors relative overflow-hidden mt-1.5 group">
+                      {logoUrl ? (
+                        <>
+                          <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Camera className="h-5 w-5 text-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                          {uploadingLogo ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+                          <span className="text-[10px] mt-1 font-medium">{uploadingLogo ? "Enviando..." : "Upload Logo"}</span>
+                          <span className="text-[9px] text-muted-foreground/60 mt-0.5">Max 2MB</span>
+                        </div>
+                      )}
+                      <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
+                    </label>
+                    {logoUrl && (
+                      <button onClick={() => setForm({ ...form, logoUrl: "" })} className="text-[10px] text-danger font-bold mt-1 hover:underline w-full text-center">Remover Logo</button>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground/80">Capa (Banner)</label>
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer hover:bg-muted/50 transition-colors relative overflow-hidden mt-1.5 group">
+                      {bannerUrl ? (
+                        <>
+                          <img src={bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <ImageIcon className="h-5 w-5 text-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                          {uploadingBanner ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImageIcon className="h-5 w-5" />}
+                          <span className="text-[10px] mt-1 font-medium">{uploadingBanner ? "Enviando..." : "Upload Capa"}</span>
+                          <span className="text-[9px] text-muted-foreground/60 mt-0.5">Max 2MB</span>
+                        </div>
+                      )}
+                      <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={uploadingBanner} />
+                    </label>
+                    {bannerUrl && (
+                      <button onClick={() => setForm({ ...form, bannerUrl: "" })} className="text-[10px] text-danger font-bold mt-1 hover:underline w-full text-center">Remover Capa</button>
+                    )}
+                  </div>
+                </div>
+              </SectionCard>
+
+              {/* Contato */}
+              <SectionCard
+                title="Contato"
+                icon={<Phone className="h-5 w-5 text-accent" />}
+                defaultOpen={true}
+              >
+                <div className="space-y-4">
                   <Input
                     label="WhatsApp"
                     value={form.whatsapp || ""}
@@ -495,121 +721,166 @@ export function SettingsPage() {
                     placeholder="5511999999999"
                     icon={<MessageCircle className="h-4 w-4" />}
                   />
+                  <p className="text-xs text-muted-foreground -mt-2">Numero para atendimento e pedidos via WhatsApp. Inclua o codigo do pais.</p>
+                </div>
+              </SectionCard>
 
-                  {/* Localização */}
-                  <div className="border-t pt-4 mt-2">
-                    <label className="text-sm font-medium text-foreground/80 flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5" /> Localização da Loja
-                    </label>
-                    {form.fullAddress ? (
-                      <div className="bg-muted p-3 rounded-xl border text-sm mt-2">
+              {/* Localizacao */}
+              <SectionCard
+                title="Localizacao"
+                icon={<MapPin className="h-5 w-5 text-accent" />}
+                defaultOpen={true}
+              >
+                {form.fullAddress ? (
+                  <div className="bg-muted p-4 rounded-xl border text-sm">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-4 w-4 text-accent mt-0.5 shrink-0" />
+                      <div className="flex-1">
                         <p className="font-semibold text-foreground">{form.fullAddress}</p>
                         {form.latitude != null && form.longitude != null && (
                           <p className="text-muted-foreground text-xs mt-1">Lat: {form.latitude.toFixed(5)}, Lon: {form.longitude.toFixed(5)}</p>
                         )}
-                        <button onClick={() => setForm({ ...form, fullAddress: "", latitude: undefined, longitude: undefined })} className="text-danger text-xs font-bold mt-2 hover:underline">
-                          Alterar Endereço
-                        </button>
                       </div>
-                    ) : (
-                      <div className="space-y-2 mt-2">
-                        <div className="flex gap-2">
-                          <input
-                            className="flex-1 h-10 rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
-                            placeholder="Digite o endereço (Rua, Cidade...)"
-                            value={addressQuery}
-                            onChange={e => setAddressQuery(e.target.value)}
-                            onKeyDown={e => e.key === "Enter" && searchAddress()}
-                          />
-                          <button onClick={searchAddress} disabled={searchingAddress} className="h-10 px-3 bg-foreground text-background rounded-xl hover:bg-foreground/90 disabled:opacity-50 flex items-center justify-center">
-                            {searchingAddress ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                          </button>
-                        </div>
-                        {addressResults.length > 0 && (
-                          <div className="max-h-40 overflow-y-auto border border-border rounded-xl bg-card shadow-sm">
-                            {addressResults.map((result, idx) => (
-                              <div key={idx} onClick={() => selectAddress(result)} className="p-2.5 text-sm border-b border-border last:border-0 hover:bg-accent-light cursor-pointer transition-colors">
-                                {result.display_name}
-                              </div>
-                            ))}
+                    </div>
+                    <button onClick={() => setForm({ ...form, fullAddress: "", latitude: undefined, longitude: undefined })} className="text-danger text-xs font-bold mt-3 hover:underline flex items-center gap-1">
+                      <X className="h-3 w-3" /> Alterar Endereco
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 h-10 rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+                        placeholder="Digite o endereco (Rua, Cidade...)"
+                        value={addressQuery}
+                        onChange={e => setAddressQuery(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && searchAddress()}
+                      />
+                      <button onClick={searchAddress} disabled={searchingAddress} className="h-10 px-3 bg-foreground text-background rounded-xl hover:bg-foreground/90 disabled:opacity-50 flex items-center justify-center">
+                        {searchingAddress ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {addressResults.length > 0 && (
+                      <div className="max-h-40 overflow-y-auto border border-border rounded-xl bg-card shadow-sm">
+                        {addressResults.map((result, idx) => (
+                          <div key={idx} onClick={() => selectAddress(result)} className="p-2.5 text-sm border-b border-border last:border-0 hover:bg-accent-light cursor-pointer transition-colors">
+                            {result.display_name}
                           </div>
-                        )}
-                        <button onClick={getMyLocation} disabled={loadingLocation} className="w-full h-10 bg-muted text-foreground font-medium text-sm rounded-xl hover:bg-border flex items-center justify-center gap-2 disabled:opacity-50">
-                          {loadingLocation ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
-                          {loadingLocation ? "Buscando..." : "Usar Localização Atual (GPS)"}
-                        </button>
+                        ))}
                       </div>
                     )}
+                    <button onClick={getMyLocation} disabled={loadingLocation} className="w-full h-10 bg-muted text-foreground font-medium text-sm rounded-xl hover:bg-border flex items-center justify-center gap-2 disabled:opacity-50">
+                      {loadingLocation ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                      {loadingLocation ? "Buscando..." : "Usar Localizacao Atual (GPS)"}
+                    </button>
                   </div>
+                )}
+              </SectionCard>
 
-                  {/* Cor do Tema */}
-                  <div className="border-t pt-4 mt-2">
-                    <label className="text-sm font-medium text-foreground/80 flex items-center gap-1.5">
-                      <Palette className="h-3.5 w-3.5" /> Cor do Tema
-                    </label>
-                    <div className="flex gap-3 mt-2">
-                      <input
-                        type="color"
-                        className="w-10 h-10 border border-border rounded-lg cursor-pointer"
-                        value={themeColor}
-                        onChange={e => setForm({ ...form, themeColor: e.target.value })}
-                      />
-                      <div className="flex-1 flex items-center text-sm text-muted-foreground">Cor principal da sua loja</div>
+              {/* Aparencia */}
+              <SectionCard
+                title="Aparencia"
+                icon={<Palette className="h-5 w-5 text-accent" />}
+                defaultOpen={true}
+              >
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground/80">Cor do Tema</label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {presetColors.map(color => (
+                        <button
+                          key={color}
+                          onClick={() => setForm({ ...form, themeColor: color })}
+                          className={`w-8 h-8 rounded-lg border-2 transition-all hover:scale-110 ${
+                            themeColor === color ? "border-foreground scale-110 shadow-md" : "border-transparent"
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                      <div className="relative">
+                        <input
+                          type="color"
+                          className="w-8 h-8 rounded-lg cursor-pointer border-2 border-dashed border-border"
+                          value={themeColor}
+                          onChange={e => setForm({ ...form, themeColor: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">Escolha a cor principal da sua loja. Ela sera usada nos botoes, destaques e cabecalho.</p>
+                  </div>
+                  {/* Theme preview */}
+                  <div className="flex items-center gap-3 p-3 rounded-xl border border-border">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: themeColor }}>
+                      Aa
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-3 rounded-full w-24 mb-1.5" style={{ backgroundColor: themeColor }} />
+                      <div className="h-2 rounded-full w-32 bg-muted" />
+                    </div>
+                    <div className="h-8 px-3 rounded-lg text-white text-xs font-bold flex items-center" style={{ backgroundColor: themeColor }}>
+                      Botao
                     </div>
                   </div>
                 </div>
-              </Card>
+              </SectionCard>
             </motion.div>
           )}
 
-          {/* ──── HORÁRIOS TAB ──── */}
+          {/* ──── HORARIOS TAB ──── */}
           {activeTab === "horarios" && (
-            <motion.div key="horarios" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-6">
+            <motion.div key="horarios" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
               <Card>
                 <div className="flex items-center gap-2 mb-5">
                   <Clock className="h-5 w-5 text-accent" />
-                  <h2 className="text-base font-semibold text-foreground">Horários de Funcionamento</h2>
+                  <h2 className="text-base font-semibold text-foreground">Horarios de Funcionamento</h2>
                 </div>
 
                 {/* Toggle open/closed */}
-                <div className="border-b pb-4 mb-4">
+                <div className="bg-muted p-4 rounded-xl border mb-5">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-sm font-semibold text-foreground block">Loja Aberta Agora?</span>
-                      <span className="text-xs text-muted-foreground">Controle manual de abertura/fechamento</span>
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${form.isOpen ? "bg-success-light" : "bg-border"}`}>
+                        <Store className={`h-5 w-5 ${form.isOpen ? "text-success" : "text-muted-foreground"}`} />
+                      </div>
+                      <div>
+                        <span className="text-sm font-semibold text-foreground block">Loja Aberta Agora?</span>
+                        <span className="text-xs text-muted-foreground">Controle manual de abertura/fechamento</span>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => setForm({ ...form, isOpen: !form.isOpen })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.isOpen ? "bg-success" : "bg-muted"}`}
-                    >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${form.isOpen ? "translate-x-6" : "translate-x-1"}`} />
-                    </button>
+                    <ToggleSwitch checked={!!form.isOpen} onChange={() => setForm({ ...form, isOpen: !form.isOpen })} />
                   </div>
-                  <span className={`text-sm font-medium mt-1 inline-block ${form.isOpen ? "text-success" : "text-muted-foreground"}`}>
-                    {form.isOpen ? "Aberta" : "Fechada"}
-                  </span>
+                  <div className={`text-sm font-medium mt-2 ${form.isOpen ? "text-success" : "text-muted-foreground"}`}>
+                    {form.isOpen ? "Aberta - Clientes podem fazer pedidos" : "Fechada - Pedidos temporariamente pausados"}
+                  </div>
                 </div>
 
                 {/* Weekly schedule */}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {Object.entries(dayLabels).map(([dayKey, dayLabel]) => {
                     const dayConfig = (form.openingHours as any)?.[dayKey] || defaultOpeningHours[dayKey] || { open: "08:00", close: "18:00", closed: false };
+                    const isToday = new Date().toLocaleDateString("pt-BR", { weekday: "long" }).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith(dayKey.slice(0, 3));
                     return (
-                      <div key={dayKey} className="flex items-center justify-between gap-3 text-sm">
-                        <div className="w-28">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!dayConfig.closed}
-                              onChange={e => {
-                                const newHours = { ...(form.openingHours as any) };
-                                newHours[dayKey] = { ...dayConfig, closed: !e.target.checked };
-                                setForm({ ...form, openingHours: newHours });
-                              }}
-                              className="rounded text-accent focus:ring-accent/30"
-                            />
-                            <span className={dayConfig.closed ? "text-muted-foreground line-through" : "text-foreground font-medium"}>{dayLabel}</span>
-                          </label>
+                      <div
+                        key={dayKey}
+                        className={`flex items-center justify-between gap-3 text-sm p-2.5 rounded-lg transition-colors ${
+                          isToday ? "bg-accent-light border border-accent/20" : dayConfig.closed ? "bg-muted/30" : "hover:bg-muted/50"
+                        }`}
+                      >
+                        <div className="w-28 flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!dayConfig.closed}
+                            onChange={e => {
+                              const newHours = { ...(form.openingHours as any) };
+                              newHours[dayKey] = { ...dayConfig, closed: !e.target.checked };
+                              setForm({ ...form, openingHours: newHours });
+                            }}
+                            className="rounded text-accent focus:ring-accent/30"
+                          />
+                          <span className={`font-medium ${dayConfig.closed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                            {dayLabel}
+                            {isToday && <span className="ml-1 text-[9px] text-accent font-bold uppercase">(Hoje)</span>}
+                          </span>
                         </div>
                         {!dayConfig.closed ? (
                           <div className="flex items-center gap-2 flex-1">
@@ -623,7 +894,7 @@ export function SettingsPage() {
                               }}
                               className="h-9 px-2 border border-border rounded-lg text-foreground text-center flex-1 bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
                             />
-                            <span className="text-muted-foreground">às</span>
+                            <span className="text-muted-foreground text-xs">ate</span>
                             <input
                               type="time"
                               value={dayConfig.close}
@@ -648,22 +919,22 @@ export function SettingsPage() {
 
           {/* ──── PAGAMENTO TAB ──── */}
           {activeTab === "pagamento" && (
-            <motion.div key="pagamento" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-6">
+            <motion.div key="pagamento" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
               <Card>
                 <div className="flex items-center gap-2 mb-5">
                   <CreditCard className="h-5 w-5 text-accent" />
                   <h2 className="text-base font-semibold text-foreground">Pagamento e Recebimento</h2>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-5">
                   <div>
                     <Input
                       label="Chave PIX (Para Recebimentos)"
                       value={form.pixKey || ""}
                       onChange={e => setForm({ ...form, pixKey: e.target.value })}
-                      placeholder="CPF, CNPJ, E-mail, Telefone ou Aleatória"
+                      placeholder="CPF, CNPJ, E-mail, Telefone ou Aleatoria"
                       icon={<Key className="h-4 w-4" />}
                     />
-                    <p className="text-xs text-muted-foreground mt-1.5">Obrigatório para habilitar o pagamento nativo via PIX.</p>
+                    <p className="text-xs text-muted-foreground mt-1.5">Obrigatorio para habilitar o pagamento nativo via PIX.</p>
                   </div>
 
                   <div className="border-t pt-4">
@@ -673,27 +944,38 @@ export function SettingsPage() {
                       onChange={e => setForm({ ...form, document: e.target.value })}
                       placeholder="000.000.000-00 ou 00.000.000/0000-00"
                     />
-                    <p className="text-xs text-muted-foreground mt-1.5">Obrigatório para processar pagamentos nativos.</p>
+                    <p className="text-xs text-muted-foreground mt-1.5">Obrigatorio para processar pagamentos nativos.</p>
                   </div>
 
                   <div className="border-t pt-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-sm font-semibold text-foreground block">Pagamento Nativo (PIX/Cartão)</span>
-                        <span className="text-xs text-muted-foreground">Permitir que clientes paguem direto na loja</span>
+                    <div className="bg-muted p-4 rounded-xl border">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${form.enableNativePayment ? "bg-success-light" : "bg-border"}`}>
+                            <CreditCard className={`h-5 w-5 ${form.enableNativePayment ? "text-success" : "text-muted-foreground"}`} />
+                          </div>
+                          <div>
+                            <span className="text-sm font-semibold text-foreground block">Pagamento Nativo (PIX/Cartao)</span>
+                            <span className="text-xs text-muted-foreground">Permitir que clientes paguem direto na loja</span>
+                          </div>
+                        </div>
+                        <ToggleSwitch
+                          checked={!!form.enableNativePayment}
+                          onChange={() => {
+                            if (!form.enableNativePayment && !form.pixKey) {
+                              setLocalError("Configure sua Chave PIX antes de habilitar o pagamento nativo.");
+                              return;
+                            }
+                            setForm({ ...form, enableNativePayment: !form.enableNativePayment });
+                          }}
+                        />
                       </div>
-                      <button
-                        onClick={() => {
-                          if (!form.enableNativePayment && !form.pixKey) {
-                            setLocalError("Configure sua Chave PIX antes de habilitar o pagamento nativo.");
-                            return;
-                          }
-                          setForm({ ...form, enableNativePayment: !form.enableNativePayment });
-                        }}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.enableNativePayment ? "bg-success" : "bg-muted"}`}
-                      >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${form.enableNativePayment ? "translate-x-6" : "translate-x-1"}`} />
-                      </button>
+                      {form.enableNativePayment && form.pixKey && (
+                        <div className="mt-3 flex items-center gap-2 text-success text-xs font-medium">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Pagamento ativo — Chave PIX configurada
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -703,40 +985,228 @@ export function SettingsPage() {
 
           {/* ──── CONSTRUTOR TAB ──── */}
           {activeTab === "construtor" && (
-            <motion.div key="construtor" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-6">
+            <motion.div key="construtor" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
+
+              {/* Add section buttons */}
               <Card>
-                <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <LayoutGrid className="h-5 w-5 text-accent" />
                     <h2 className="text-base font-semibold text-foreground">Elementos da Loja</h2>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => addSection("hero")} className="h-8 px-3 bg-muted hover:bg-border rounded-lg text-foreground text-xs font-medium flex items-center gap-1.5 transition-colors">
-                      <Camera className="h-3.5 w-3.5" /> Banner
-                    </button>
-                    <button onClick={() => addSection("products")} className="h-8 px-3 bg-muted hover:bg-border rounded-lg text-foreground text-xs font-medium flex items-center gap-1.5 transition-colors">
-                      <Store className="h-3.5 w-3.5" /> Produtos
-                    </button>
-                    <button onClick={() => addSection("text")} className="h-8 px-3 bg-muted hover:bg-border rounded-lg text-foreground text-xs font-medium flex items-center gap-1.5 transition-colors">
-                      <Eye className="h-3.5 w-3.5" /> Texto
-                    </button>
-                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground mb-4">Adicione secoes para montar a pagina da sua loja. Arraste para reordenar.</p>
 
-                {/* Active section editor */}
-                {activeSectionId && (() => {
-                  const section = sections.find(s => s.id === activeSectionId);
-                  if (!section) return null;
-                  return (
-                    <div className="bg-accent-light border border-accent/20 rounded-xl p-4 mb-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-xs font-bold uppercase text-accent">Editando Seção</span>
+                <div className="grid grid-cols-4 gap-2">
+                  <button
+                    onClick={() => addSection("hero")}
+                    className="flex flex-col items-center gap-2 p-3 bg-muted hover:bg-border rounded-xl text-foreground text-xs font-medium transition-colors group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-accent-light flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Camera className="h-5 w-5 text-accent" />
+                    </div>
+                    Banner
+                  </button>
+                  <button
+                    onClick={() => addSection("products")}
+                    className="flex flex-col items-center gap-2 p-3 bg-muted hover:bg-border rounded-xl text-foreground text-xs font-medium transition-colors group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-success-light flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <ShoppingBag className="h-5 w-5 text-success" />
+                    </div>
+                    Produtos
+                  </button>
+                  <button
+                    onClick={() => addSection("text")}
+                    className="flex flex-col items-center gap-2 p-3 bg-muted hover:bg-border rounded-xl text-foreground text-xs font-medium transition-colors group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-warning-light flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Type className="h-5 w-5 text-warning" />
+                    </div>
+                    Texto
+                  </button>
+                  <button
+                    onClick={() => addSection("image")}
+                    className="flex flex-col items-center gap-2 p-3 bg-muted hover:bg-border rounded-xl text-foreground text-xs font-medium transition-colors group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Image className="h-5 w-5 text-blue-500" />
+                    </div>
+                    Imagem
+                  </button>
+                </div>
+              </Card>
+
+              {/* Active section editor */}
+              {activeSectionId && (() => {
+                const section = sections.find(s => s.id === activeSectionId);
+                if (!section) return null;
+                return (
+                  <Card className="border-accent/30 bg-accent-light/30">
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center gap-2">
+                        {sectionTypeIcon(section.type)}
+                        <span className="text-xs font-bold uppercase text-accent">
+                          Editando: {sectionTypeLabel(section.type)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => duplicateSection(section.id)}
+                          className="h-7 px-2 bg-muted hover:bg-border rounded-lg text-foreground text-xs font-medium flex items-center gap-1 transition-colors"
+                          title="Duplicar secao"
+                        >
+                          <Copy className="h-3 w-3" /> Duplicar
+                        </button>
                         <button onClick={() => setActiveSectionId(null)} className="text-accent/60 hover:text-accent">
                           <X className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="space-y-3">
-                        {section.type === "products" && (
+                    </div>
+                    <div className="space-y-3">
+                      {/* Title for all sections */}
+                      <div>
+                        <label className="text-xs font-medium text-foreground/80">Titulo da Secao</label>
+                        <div className="flex gap-2 mt-1">
+                          <select
+                            value={section.emoji || ""}
+                            onChange={e => updateSection(section.id, { emoji: e.target.value })}
+                            className="h-9 w-12 border border-border rounded-lg bg-background text-center text-sm"
+                          >
+                            {sectionEmojis.map(em => (
+                              <option key={em} value={em}>{em || "—"}</option>
+                            ))}
+                          </select>
+                          <input
+                            className="flex h-9 flex-1 rounded-lg border border-border bg-background px-3 text-xs"
+                            value={section.title || ""}
+                            onChange={e => updateSection(section.id, { title: e.target.value })}
+                            placeholder="Titulo da secao"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Content / Subtitle for hero and text */}
+                      {(section.type === "hero" || section.type === "text") && (
+                        <div>
+                          <label className="text-xs font-medium text-foreground/80">
+                            {section.type === "hero" ? "Subtitulo" : "Conteudo"}
+                          </label>
+                          <textarea
+                            className="mt-1 flex w-full rounded-lg border border-border bg-background px-3 py-2 text-xs resize-none min-h-[60px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+                            value={section.content || ""}
+                            onChange={e => updateSection(section.id, { content: e.target.value })}
+                            placeholder={section.type === "hero" ? "Subtitulo do banner..." : "Escreva seu texto aqui..."}
+                          />
+                        </div>
+                      )}
+
+                      {/* Hero image - upload or URL */}
+                      {section.type === "hero" && (
+                        <div>
+                          <label className="text-xs font-medium text-foreground/80">Imagem de Fundo</label>
+                          {section.imageUrl ? (
+                            <div className="mt-1 relative group rounded-lg overflow-hidden">
+                              <img src={section.imageUrl} alt="Hero" className="w-full h-32 object-cover rounded-lg" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => setEditingHeroId(section.id)}
+                                  className="h-8 px-3 bg-white/20 text-white text-xs font-medium rounded-lg backdrop-blur-sm hover:bg-white/30"
+                                >
+                                  <input
+                                    ref={editingHeroId === section.id ? heroImageInputRef : null}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={e => handleHeroImageUpload(e, section.id)}
+                                    disabled={uploadingHeroImage}
+                                  />
+                                  Trocar
+                                </button>
+                                <button
+                                  onClick={() => updateSection(section.id, { imageUrl: "" })}
+                                  className="h-8 px-3 bg-danger/80 text-white text-xs font-medium rounded-lg hover:bg-danger"
+                                >
+                                  Remover
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-1 space-y-2">
+                              <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                                <div className="flex flex-col items-center text-muted-foreground">
+                                  {uploadingHeroImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                  <span className="text-[10px] mt-1 font-medium">{uploadingHeroImage ? "Enviando..." : "Upload de Imagem"}</span>
+                                </div>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => handleHeroImageUpload(e, section.id)}
+                                  disabled={uploadingHeroImage}
+                                />
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <div className="h-px flex-1 bg-border" />
+                                <span className="text-[10px] text-muted-foreground">ou</span>
+                                <div className="h-px flex-1 bg-border" />
+                              </div>
+                              <input
+                                className="flex h-9 w-full rounded-lg border border-border bg-background px-3 text-xs"
+                                value={section.imageUrl || ""}
+                                onChange={e => updateSection(section.id, { imageUrl: e.target.value })}
+                                placeholder="Cole uma URL de imagem..."
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Image section - upload */}
+                      {section.type === "image" && (
+                        <div>
+                          <label className="text-xs font-medium text-foreground/80">Imagem</label>
+                          {section.imageUrl ? (
+                            <div className="mt-1 relative group rounded-lg overflow-hidden">
+                              <img src={section.imageUrl} alt="Section" className="w-full h-32 object-cover rounded-lg" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => updateSection(section.id, { imageUrl: "" })}
+                                  className="h-8 px-3 bg-danger/80 text-white text-xs font-medium rounded-lg hover:bg-danger"
+                                >
+                                  Remover
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-1 space-y-2">
+                              <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                                <div className="flex flex-col items-center text-muted-foreground">
+                                  {uploadingHeroImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                  <span className="text-[10px] mt-1 font-medium">Upload de Imagem</span>
+                                </div>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => handleHeroImageUpload(e, section.id)}
+                                  disabled={uploadingHeroImage}
+                                />
+                              </label>
+                              <input
+                                className="flex h-9 w-full rounded-lg border border-border bg-background px-3 text-xs"
+                                value={section.imageUrl || ""}
+                                onChange={e => updateSection(section.id, { imageUrl: e.target.value })}
+                                placeholder="Ou cole uma URL de imagem..."
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Products section - filter & layout */}
+                      {section.type === "products" && (
+                        <div className="space-y-3">
                           <div>
                             <label className="text-xs font-medium text-foreground/80">Filtrar por Categoria</label>
                             <input
@@ -745,83 +1215,90 @@ export function SettingsPage() {
                               onChange={e => updateSection(section.id, { filterCategory: e.target.value })}
                               placeholder="Todas as categorias"
                             />
-                            <p className="text-[10px] text-muted-foreground mt-1">Deixe vazio para mostrar tudo.</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">Deixe vazio para mostrar todos os produtos.</p>
                           </div>
-                        )}
-                        {(section.type === "hero" || section.type === "text") && (
                           <div>
-                            <label className="text-xs font-medium text-foreground/80">Texto do Título</label>
-                            <input
-                              className="mt-1 flex h-9 w-full rounded-lg border border-border bg-background px-3 text-xs"
-                              value={section.title || ""}
-                              onChange={e => updateSection(section.id, { title: e.target.value })}
-                            />
-                          </div>
-                        )}
-                        {(section.type === "hero" || section.type === "text") && (
-                          <div>
-                            <label className="text-xs font-medium text-foreground/80">Subtítulo / Conteúdo</label>
-                            <textarea
-                              className="mt-1 flex w-full rounded-lg border border-border bg-background px-3 py-2 text-xs resize-none min-h-[60px]"
-                              value={section.content || ""}
-                              onChange={e => updateSection(section.id, { content: e.target.value })}
-                            />
-                          </div>
-                        )}
-                        {(section.type === "hero") && (
-                          <div>
-                            <label className="text-xs font-medium text-foreground/80">Imagem de Fundo (URL)</label>
-                            <input
-                              className="mt-1 flex h-9 w-full rounded-lg border border-border bg-background px-3 text-xs"
-                              value={section.imageUrl || ""}
-                              onChange={e => updateSection(section.id, { imageUrl: e.target.value })}
-                              placeholder="https://..."
-                            />
-                          </div>
-                        )}
-                        <div className="flex gap-4">
-                          <div className="flex-1">
-                            <label className="text-xs font-medium text-foreground/80">Fundo</label>
-                            <div className="flex items-center gap-2 mt-1">
-                              <input
-                                type="color"
-                                className="w-8 h-8 border-none bg-transparent cursor-pointer"
-                                value={section.backgroundColor || "#ffffff"}
-                                onChange={e => updateSection(section.id, { backgroundColor: e.target.value })}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex-1">
-                            <label className="text-xs font-medium text-foreground/80">Texto</label>
-                            <div className="flex items-center gap-2 mt-1">
-                              <input
-                                type="color"
-                                className="w-8 h-8 border-none bg-transparent cursor-pointer"
-                                value={section.textColor || "#000000"}
-                                onChange={e => updateSection(section.id, { textColor: e.target.value })}
-                              />
+                            <label className="text-xs font-medium text-foreground/80">Layout</label>
+                            <div className="flex gap-2 mt-1">
+                              <button
+                                onClick={() => updateSection(section.id, { layout: "grid" })}
+                                className={`flex-1 h-9 rounded-lg border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                                  (section.layout || "grid") === "grid"
+                                    ? "border-accent bg-accent-light text-accent"
+                                    : "border-border bg-background text-muted-foreground hover:bg-muted"
+                                }`}
+                              >
+                                <LayoutGrid className="h-3.5 w-3.5" /> Grid
+                              </button>
+                              <button
+                                onClick={() => updateSection(section.id, { layout: "list" })}
+                                className={`flex-1 h-9 rounded-lg border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                                  section.layout === "list"
+                                    ? "border-accent bg-accent-light text-accent"
+                                    : "border-border bg-background text-muted-foreground hover:bg-muted"
+                                }`}
+                              >
+                                <FileText className="h-3.5 w-3.5" /> Lista
+                              </button>
                             </div>
                           </div>
                         </div>
-                        <button
-                          onClick={() => removeSection(section.id)}
-                          className="w-full h-9 bg-danger-light border border-danger/20 text-danger text-xs font-bold rounded-lg hover:bg-danger-light/80 flex items-center justify-center gap-1.5"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Remover Seção
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
+                      )}
 
-                {/* Section list with drag & drop */}
-                {sections.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <LayoutGrid className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">Adicione seções usando os botões acima.</p>
+                      {/* Colors */}
+                      <div className="flex gap-4">
+                        <div className="flex-1">
+                          <label className="text-xs font-medium text-foreground/80">Cor de Fundo</label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <input
+                              type="color"
+                              className="w-8 h-8 border-none bg-transparent cursor-pointer"
+                              value={section.backgroundColor || (section.type === "hero" ? themeColor : "#ffffff")}
+                              onChange={e => updateSection(section.id, { backgroundColor: e.target.value })}
+                            />
+                            <span className="text-xs text-muted-foreground">{section.backgroundColor || (section.type === "hero" ? "Tema" : "Branco")}</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-xs font-medium text-foreground/80">Cor do Texto</label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <input
+                              type="color"
+                              className="w-8 h-8 border-none bg-transparent cursor-pointer"
+                              value={section.textColor || (section.type === "hero" ? "#ffffff" : "#000000")}
+                              onChange={e => updateSection(section.id, { textColor: e.target.value })}
+                            />
+                            <span className="text-xs text-muted-foreground">{section.textColor || (section.type === "hero" ? "Branco" : "Preto")}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Remove section */}
+                      <button
+                        onClick={() => removeSection(section.id)}
+                        className="w-full h-9 bg-danger-light border border-danger/20 text-danger text-xs font-bold rounded-lg hover:bg-danger-light/80 flex items-center justify-center gap-1.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Remover Secao
+                      </button>
+                    </div>
+                  </Card>
+                );
+              })()}
+
+              {/* Section list with drag & drop */}
+              {sections.length === 0 ? (
+                <Card>
+                  <div className="text-center py-10">
+                    <div className="h-16 w-16 rounded-2xl bg-muted mx-auto mb-4 flex items-center justify-center">
+                      <LayoutGrid className="h-8 w-8 text-muted-foreground/40" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">Nenhuma secao adicionada</p>
+                    <p className="text-xs text-muted-foreground mt-1">Use os botoes acima para comecar a montar sua loja.</p>
                   </div>
-                ) : (
-                  <div className="space-y-2">
+                </Card>
+              ) : (
+                <Card>
+                  <div className="space-y-1.5">
                     {sections.map((section, index) => (
                       <div
                         key={section.id}
@@ -829,54 +1306,73 @@ export function SettingsPage() {
                         onDragStart={() => handleDragStart(index)}
                         onDragOver={handleDragOver}
                         onDrop={e => handleDrop(e, index)}
-                        onClick={() => setActiveSectionId(section.id)}
+                        onClick={() => setActiveSectionId(section.id === activeSectionId ? null : section.id)}
                         className={`flex items-center gap-3 p-3 rounded-xl border cursor-move transition-all ${
                           activeSectionId === section.id
-                            ? "border-accent/30 bg-accent-light"
+                            ? "border-accent/30 bg-accent-light/50"
                             : "border-border bg-background hover:bg-muted/50"
-                        } ${draggedItem === index ? "opacity-50" : "opacity-100"}`}
+                        } ${draggedItem === index ? "opacity-40 scale-95" : "opacity-100"}`}
                       >
                         <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
                         <div className="flex items-center gap-2 flex-1 min-w-0">
-                          {section.type === "hero" && <Camera className="h-4 w-4 text-accent shrink-0" />}
-                          {section.type === "products" && <Store className="h-4 w-4 text-success shrink-0" />}
-                          {section.type === "text" && <Eye className="h-4 w-4 text-warning shrink-0" />}
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{section.title || "Sem título"}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{section.type === "hero" ? "Banner" : section.type === "products" ? "Produtos" : "Texto"}</p>
+                          {sectionTypeIcon(section.type)}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              {section.emoji && <span className="text-sm">{section.emoji}</span>}
+                              <p className="text-sm font-medium text-foreground truncate">{section.title || "Sem titulo"}</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{sectionTypeLabel(section.type)}{section.type === "products" && section.filterCategory ? ` — ${section.filterCategory}` : ""}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-4 h-4 rounded border border-border" style={{ backgroundColor: section.backgroundColor || "#ffffff" }} />
+                        <div className="flex items-center gap-1.5">
+                          {section.type === "products" && (
+                            <span className="text-[9px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded uppercase">
+                              {section.layout || "grid"}
+                            </span>
+                          )}
+                          <div className="w-4 h-4 rounded border border-border" style={{ backgroundColor: section.backgroundColor || (section.type === "hero" ? themeColor : "#ffffff") }} />
                           <div className="w-4 h-4 rounded border border-border" style={{ backgroundColor: section.textColor || "#000000" }} />
+                          <button
+                            onClick={(e) => { e.stopPropagation(); duplicateSection(section.id); }}
+                            className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            title="Duplicar"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
                         </div>
                       </div>
                     ))}
                   </div>
-                )}
-
-                <p className="text-xs text-muted-foreground mt-4">
-                  <span className="font-semibold">Dica:</span> Arraste os elementos para reordenar. Clique neles para editar.
-                </p>
-              </Card>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    <span className="font-semibold">Dica:</span> Arraste para reordenar. Clique para editar. Use o botao de duplicar para copiar secoes.
+                  </p>
+                </Card>
+              )}
 
               {/* Store Preview */}
               <Card>
-                <div className="flex items-center gap-2 mb-4">
-                  <Eye className="h-5 w-5 text-accent" />
-                  <h2 className="text-base font-semibold text-foreground">Preview da Loja</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Eye className="h-5 w-5 text-accent" />
+                    <h2 className="text-base font-semibold text-foreground">Preview da Loja</h2>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-lg">Visualizacao aproximada</span>
                 </div>
-                <div className="rounded-xl border-[6px] border-foreground/80 overflow-hidden max-w-[360px] mx-auto">
+                <div className="rounded-2xl border-[6px] border-foreground/80 overflow-hidden max-w-[360px] mx-auto shadow-lg">
                   {/* Phone top bar */}
-                  <div className="bg-foreground/80 flex justify-center">
+                  <div className="bg-foreground/80 flex justify-center py-1">
                     <div className="w-20 h-4 bg-foreground rounded-b-lg" />
                   </div>
                   {/* Store preview content */}
-                  <div className="bg-background overflow-y-auto max-h-[400px]">
+                  <div className="bg-background overflow-y-auto max-h-[460px]">
                     {/* Banner */}
-                    <div className="h-20 w-full bg-cover bg-center" style={{
+                    <div className="h-24 w-full bg-cover bg-center relative" style={{
                       backgroundImage: bannerUrl ? `url(${bannerUrl})` : `linear-gradient(to right, ${themeColor}, ${themeColor}dd)`,
-                    }} />
+                    }}>
+                      {form.isPublished && (
+                        <span className="absolute top-2 right-2 px-1.5 py-0.5 bg-success text-white text-[8px] font-bold rounded uppercase">Ao Vivo</span>
+                      )}
+                    </div>
                     {/* Logo + Name */}
                     <div className="px-4 -mt-8 flex flex-col items-center gap-2 relative z-10 text-center pb-4">
                       <div className="w-14 h-14 rounded-full border-2 border-card bg-card shadow overflow-hidden">
@@ -891,11 +1387,16 @@ export function SettingsPage() {
                       <div>
                         <h1 className="font-bold text-foreground text-sm leading-tight">{storeName}</h1>
                         <p className="text-muted-foreground text-[10px] mt-0.5">{form.description || ""}</p>
-                        {form.category && (
-                          <span className="inline-block mt-1 px-2 py-0.5 bg-muted text-muted-foreground text-[9px] font-bold rounded uppercase tracking-wider">
-                            {form.category}
+                        <div className="flex items-center justify-center gap-1.5 mt-1">
+                          {form.category && (
+                            <span className="px-1.5 py-0.5 bg-muted text-muted-foreground text-[8px] font-bold rounded uppercase tracking-wider">
+                              {form.category}
+                            </span>
+                          )}
+                          <span className={`px-1.5 py-0.5 text-[8px] font-bold rounded uppercase ${form.isOpen ? "bg-success-light text-success" : "bg-muted text-muted-foreground"}`}>
+                            {form.isOpen ? "Aberta" : "Fechada"}
                           </span>
-                        )}
+                        </div>
                       </div>
                     </div>
                     {/* Sections preview */}
@@ -912,30 +1413,73 @@ export function SettingsPage() {
                               color: section.textColor || "#ffffff",
                             }}
                           >
-                            <h2 className="text-lg font-bold leading-tight">{section.title || "Banner"}</h2>
-                            <p className="text-xs opacity-80 mt-1">{section.content || ""}</p>
+                            {section.emoji && <span className="text-2xl mb-1">{section.emoji}</span>}
+                            <h2 className="text-base font-bold leading-tight">{section.title || "Banner"}</h2>
+                            <p className="text-[10px] opacity-80 mt-1 max-w-[200px]">{section.content || ""}</p>
                           </div>
                         )}
                         {section.type === "products" && (
-                          <div className="py-4 px-4" style={{ backgroundColor: section.backgroundColor || "#ffffff" }}>
-                            {section.title && <h3 className="text-sm font-bold text-center mb-2" style={{ color: section.textColor || "#0a0a0a" }}>{section.title}</h3>}
-                            <div className="grid grid-cols-2 gap-2">
-                              {[1, 2, 3, 4].map(i => (
-                                <div key={i} className="bg-muted rounded-lg h-16 flex items-center justify-center">
-                                  <Store className="h-4 w-4 text-muted-foreground/40" />
-                                </div>
-                              ))}
-                            </div>
+                          <div className="py-3 px-4" style={{ backgroundColor: section.backgroundColor || "#ffffff" }}>
+                            {section.title && (
+                              <h3 className="text-xs font-bold text-center mb-2" style={{ color: section.textColor || "#0a0a0a" }}>
+                                {section.emoji && <span className="mr-1">{section.emoji}</span>}
+                                {section.title}
+                              </h3>
+                            )}
+                            {(section.layout || "grid") === "grid" ? (
+                              <div className="grid grid-cols-2 gap-2">
+                                {[1, 2, 3, 4].map(i => (
+                                  <div key={i} className="bg-muted rounded-lg h-14 flex items-center justify-center">
+                                    <ShoppingBag className="h-4 w-4 text-muted-foreground/30" />
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {[1, 2, 3].map(i => (
+                                  <div key={i} className="flex items-center gap-2 bg-muted rounded-lg p-2">
+                                    <div className="w-10 h-10 bg-border rounded-lg shrink-0" />
+                                    <div className="flex-1">
+                                      <div className="h-2 w-20 bg-border rounded" />
+                                      <div className="h-1.5 w-12 bg-border rounded mt-1" />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                         {section.type === "text" && (
-                          <div className="py-6 px-4 text-center" style={{ backgroundColor: section.backgroundColor || "#ffffff", color: section.textColor || "#0a0a0a" }}>
-                            {section.title && <h3 className="text-sm font-bold mb-1">{section.title}</h3>}
-                            <p className="text-xs opacity-80 leading-relaxed">{section.content || ""}</p>
+                          <div className="py-5 px-4 text-center" style={{ backgroundColor: section.backgroundColor || "#ffffff", color: section.textColor || "#0a0a0a" }}>
+                            {section.emoji && <span className="text-lg block mb-1">{section.emoji}</span>}
+                            {section.title && <h3 className="text-xs font-bold mb-1">{section.title}</h3>}
+                            <p className="text-[10px] opacity-80 leading-relaxed max-w-[250px] mx-auto">{section.content || ""}</p>
+                          </div>
+                        )}
+                        {section.type === "image" && (
+                          <div style={{ backgroundColor: section.backgroundColor || "#ffffff" }}>
+                            {section.imageUrl ? (
+                              <img src={section.imageUrl} alt="Section" className="w-full h-32 object-cover" />
+                            ) : (
+                              <div className="h-32 flex items-center justify-center bg-muted">
+                                <Image className="h-8 w-8 text-muted-foreground/20" />
+                              </div>
+                            )}
+                            {section.title && (
+                              <p className="text-[10px] text-center py-2 opacity-60" style={{ color: section.textColor || "#000000" }}>
+                                {section.emoji && <span className="mr-1">{section.emoji}</span>}
+                                {section.title}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
                     ))}
+                    {sections.length === 0 && (
+                      <div className="py-8 text-center text-muted-foreground">
+                        <p className="text-[10px]">Adicione secoes no construtor</p>
+                      </div>
+                    )}
                   </div>
                   {/* Phone bottom bar */}
                   <div className="h-8 bg-card border-t flex justify-around items-center px-4">

@@ -44,3 +44,24 @@ Stage Summary:
 - v1.9.1 released at https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v1.9.1
 - Key improvements: real Firebase sync detection instead of timeout, Firestore offline persistence enabled
 - Files: nova-crm_1.9.1_amd64.deb, Nova-CRM-1.9.1-win-x64.zip
+---
+Task ID: 1
+Agent: Main Agent
+Task: Integrate Minha Loja tab matching CRM repository structure
+
+Work Log:
+- Explored CRM repository (Pedro21062014/CRM) to find StoreEditor component structure
+- Found StoreEditor in App.tsx with 4 tabs: Geral, Horários, Pagamento, Construtor
+- Analyzed all tab features: address search, opening hours, payment config, visual builder with sections
+- Completely rewrote SettingsPage.tsx to match CRM structure
+- Added tabs: Geral (name, logo/banner, category, whatsapp, address search with Photon API + GPS, theme color), Horários (weekly schedule with open/close times), Pagamento (PIX key, CPF/CNPJ, native payment toggle), Construtor (section management with drag & drop, section editor, phone preview)
+- Added publish/unpublish store toggle in header
+- Added field validation (PIX key required for native payment, CPF/CNPJ required for publishing)
+- Built Linux .deb and Windows .zip
+- Created GitHub release v1.10.0
+
+Stage Summary:
+- v1.10.0 released at https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v1.10.0
+- Complete rewrite of SettingsPage to match CRM's StoreEditor
+- New features: 4-tab layout, opening hours, address search, visual store builder with preview
+- Files: nova-crm_1.10.0_amd64.deb, Nova-CRM-1.10.0-win-x64.zip
