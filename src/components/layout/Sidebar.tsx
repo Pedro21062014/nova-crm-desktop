@@ -12,9 +12,11 @@ import {
   LogOut,
   MessageCircle,
   MessageSquare,
+  Store,
 } from "lucide-react";
 import logoSvg from "/logo.svg";
 import { useAuth } from "@/hooks/useAuth";
+import { useStoreConfig } from "@/hooks/useStoreConfig";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -37,14 +39,19 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { config } = useStoreConfig();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+
+  // Get the store logo URL from storeConfig (CRM format) or old format
+  const storeLogoUrl = config?.logoUrl || config?.logo || "";
+  const storeName = config?.storeName || config?.nomeLoja || config?.name || "";
 
   return (
     <motion.aside
       initial={false}
       animate={{ width: collapsed ? 72 : 240 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-      className="flex h-screen flex-col border-r border-border bg-sidebar"
+      className="flex h-full flex-col border-r border-border bg-sidebar"
     >
       {/* Logo */}
       <div className="flex h-16 items-center justify-between px-4">
@@ -135,8 +142,40 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Footer */}
       <div className="border-t border-border p-3 space-y-2">
         {!collapsed && user && (
-          <div className="px-3 py-2">
-            <p className="text-xs font-medium text-foreground truncate">{user.email}</p>
+          <div className="flex items-center gap-3 px-3 py-2">
+            {/* Profile / Store Logo */}
+            <div className="h-9 w-9 shrink-0 rounded-full bg-muted overflow-hidden flex items-center justify-center border border-border">
+              {storeLogoUrl ? (
+                <img
+                  src={storeLogoUrl}
+                  alt={storeName || "Logo"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Store className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              {storeName && (
+                <p className="text-xs font-semibold text-foreground truncate">{storeName}</p>
+              )}
+              <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
+            </div>
+          </div>
+        )}
+        {collapsed && user && (
+          <div className="flex justify-center py-1">
+            <div className="h-9 w-9 shrink-0 rounded-full bg-muted overflow-hidden flex items-center justify-center border border-border">
+              {storeLogoUrl ? (
+                <img
+                  src={storeLogoUrl}
+                  alt={storeName || "Logo"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Store className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
           </div>
         )}
         <div className="flex items-center gap-2">
