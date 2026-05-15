@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   DollarSign,
   ShoppingCart,
@@ -8,6 +8,10 @@ import {
   ArrowUpRight,
   CreditCard,
   Package,
+  Calendar,
+  ChevronDown,
+  X,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, Skeleton } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
@@ -50,6 +54,54 @@ function isPending(o: any): boolean {
   return status === "new" || status === "pending_payment" || status === "pending" || status === "pendente";
 }
 
+// ── Date range types ──
+
+type PresetRange = "7d" | "30d" | "60d" | "custom";
+
+interface DateRange {
+  start: Date;
+  end: Date;
+  label: string;
+}
+
+const presetOptions: { key: PresetRange; label: string; days: number }[] = [
+  { key: "7d", label: "7 dias", days: 7 },
+  { key: "30d", label: "1 mes", days: 30 },
+  { key: "60d", label: "2 meses", days: 60 },
+  { key: "custom", label: "Personalizado", days: 0 },
+];
+
+function getDateRange(preset: PresetRange, customStart?: string, customEnd?: string): DateRange {
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+
+  if (preset === "custom" && customStart && customEnd) {
+    const start = new Date(customStart);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(customEnd);
+    end.setHours(23, 59, 59, 999);
+    return {
+      start,
+      end,
+      label: `${start.toLocaleDateString("pt-BR")} - ${end.toLocaleDateString("pt-BR")}`,
+    };
+  }
+
+  const match = presetOptions.find(p => p.key === preset) || presetOptions[0];
+  const days = match.days || 7;
+  const start = new Date(now);
+  start.setDate(start.getDate() - (days - 1));
+  start.setHours(0, 0, 0, 0);
+
+  return {
+    start,
+    end: now,
+    label: match.label,
+  };
+}
+
+// ── Animation Variants ──
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: {
@@ -63,23 +115,43 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.4, 0, 0.2, 1] as const } },
 };
 
+// ── Main Component ──
+
 export function DashboardPage() {
   const { items: orders, loading: ordersLoading } = useOrders();
   const { items: clients, loading: clientsLoading } = useClients();
   const { items: products, loading: productsLoading } = useProducts();
   const { config: storeConfig } = useStoreConfig();
 
-  // Revenue calculations matching CRM DashboardHome.tsx logic:
-  // - Faturamento Total = sum of order.total where status !== 'cancelled'
-  // - Valor Pago (Pix/Cartão) = sum of order.total where platform-managed payment AND paymentStatus === 'paid'
-  // - Vendas (Pedidos) = count of non-cancelled orders
-  const { totalRevenue, totalPaid, totalOrders, pendingOrders } = useMemo(() => {
+  // Time filter state
+  const [activePreset, setActivePreset] = useState<PresetRange>("7d");
+  const [customStart, setCustomStart] = useState<string>("");
+  const [customEnd, setCustomEnd] = useState<string>("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const dateRange = useMemo(
+    () => getDateRange(activePreset, customStart, customEnd),
+    [activePreset, customStart, customEnd]
+  );
+
+  // Filtered orders by date range
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o: any) => {
+      const ts = o.createdAt;
+      if (!ts) return false;
+      const date = new Date(typeof ts === "number" ? ts : ts);
+      return date >= dateRange.start && date <= dateRange.end;
+    });
+  }, [orders, dateRange]);
+
+  // Revenue calculations matching CRM DashboardHome.tsx logic
+  const { totalRevenue, totalPaid, totalOrders, pendingOrders, periodComparison } = useMemo(() => {
     let revenue = 0;
     let paid = 0;
     let orderCount = 0;
     let pending = 0;
 
-    orders.forEach((o) => {
+    filteredOrders.forEach((o: any) => {
       const orderTotal = Number(o.total || 0);
 
       if (!isCancelled(o) && !isNaN(orderTotal)) {
@@ -96,8 +168,42 @@ export function DashboardPage() {
       }
     });
 
-    return { totalRevenue: revenue, totalPaid: paid, totalOrders: orderCount, pendingOrders: pending };
-  }, [orders]);
+    // Comparison with previous period
+    const periodDays = Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const prevEnd = new Date(dateRange.start);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    prevEnd.setHours(23, 59, 59, 999);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - (periodDays - 1));
+    prevStart.setHours(0, 0, 0, 0);
+
+    let prevRevenue = 0;
+    let prevOrderCount = 0;
+
+    orders.forEach((o: any) => {
+      const ts = o.createdAt;
+      if (!ts) return;
+      const date = new Date(typeof ts === "number" ? ts : ts);
+      if (date >= prevStart && date <= prevEnd) {
+        const orderTotal = Number(o.total || 0);
+        if (!isCancelled(o) && !isNaN(orderTotal)) {
+          prevOrderCount++;
+          prevRevenue += orderTotal;
+        }
+      }
+    });
+
+    const revenueChange = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : revenue > 0 ? 100 : 0;
+    const ordersChange = prevOrderCount > 0 ? ((orderCount - prevOrderCount) / prevOrderCount) * 100 : orderCount > 0 ? 100 : 0;
+
+    return {
+      totalRevenue: revenue,
+      totalPaid: paid,
+      totalOrders: orderCount,
+      pendingOrders: pending,
+      periodComparison: { revenueChange, ordersChange, prevRevenue, prevOrderCount },
+    };
+  }, [filteredOrders, orders, dateRange]);
 
   const totalClients = clients.length;
   const totalProducts = products.length;
@@ -105,20 +211,31 @@ export function DashboardPage() {
   // Store name: prefer CRM storeConfig.storeName, then old fields
   const storeName = storeConfig?.storeName || storeConfig?.nomeLoja || storeConfig?.name || "Nova CRM";
 
+  const formatChange = (change: number) => {
+    if (change === 0) return { text: "Sem alteracao", positive: true };
+    const sign = change > 0 ? "+" : "";
+    return { text: `${sign}${change.toFixed(1)}%`, positive: change >= 0 };
+  };
+
+  const revenueChange = formatChange(periodComparison.revenueChange);
+  const ordersChange = formatChange(periodComparison.ordersChange);
+
   const stats = [
     {
-      label: "Faturamento Total",
+      label: "Faturamento",
       value: formatCurrency(totalRevenue),
       icon: DollarSign,
       color: "text-success",
       bg: "bg-success-light",
+      change: revenueChange,
     },
     {
-      label: "Valor Pago (Pix/Cartão)",
+      label: "Valor Pago (Pix/Cartao)",
       value: formatCurrency(totalPaid),
       icon: CreditCard,
       color: "text-blue-500",
       bg: "bg-blue-50",
+      change: null,
     },
     {
       label: "Vendas",
@@ -126,6 +243,7 @@ export function DashboardPage() {
       icon: ShoppingCart,
       color: "text-accent",
       bg: "bg-accent-light",
+      change: ordersChange,
     },
     {
       label: "Pedidos Pendentes",
@@ -133,10 +251,14 @@ export function DashboardPage() {
       icon: Package,
       color: "text-warning",
       bg: "bg-warning-light",
+      change: null,
     },
   ];
 
   const isLoading = ordersLoading || clientsLoading || productsLoading;
+
+  // Helper to format date for input[type=date]
+  const toInputDate = (d: Date) => d.toISOString().split("T")[0];
 
   return (
     <motion.div
@@ -145,14 +267,107 @@ export function DashboardPage() {
       animate="show"
       className="p-8 space-y-8"
     >
-      {/* Page Header */}
-      <motion.div variants={itemVariants}>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Visão geral de {storeName}
-        </p>
+      {/* Page Header + Time Filter */}
+      <motion.div variants={itemVariants} className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Dashboard
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Visao geral de {storeName}
+          </p>
+        </div>
+
+        {/* Time Filter */}
+        <div className="flex items-center gap-2">
+          <div className="flex bg-muted p-1 rounded-xl gap-0.5">
+            {presetOptions.map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => {
+                  if (opt.key === "custom") {
+                    setShowDatePicker(true);
+                    // Set default custom dates if not set
+                    if (!customStart) {
+                      const end = new Date();
+                      const start = new Date();
+                      start.setDate(start.getDate() - 29);
+                      setCustomStart(toInputDate(start));
+                      setCustomEnd(toInputDate(end));
+                    }
+                  } else {
+                    setShowDatePicker(false);
+                  }
+                  setActivePreset(opt.key);
+                }}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  activePreset === opt.key
+                    ? "bg-card text-accent shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Custom Date Picker */}
+      <AnimatePresence>
+        {showDatePicker && activePreset === "custom" && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -10, height: 0 }}
+            className="overflow-hidden"
+          >
+            <Card>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-accent" />
+                  <span className="text-sm font-medium text-foreground">Periodo:</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={e => setCustomStart(e.target.value)}
+                    className="h-9 px-3 border border-border rounded-lg bg-background text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+                  />
+                  <span className="text-muted-foreground text-sm">ate</span>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={e => setCustomEnd(e.target.value)}
+                    className="h-9 px-3 border border-border rounded-lg bg-background text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+                  />
+                </div>
+                {customStart && customEnd && (
+                  <span className="text-xs text-muted-foreground">
+                    {Math.ceil((new Date(customEnd).getTime() - new Date(customStart).getTime()) / (1000 * 60 * 60 * 24)) + 1} dias
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowDatePicker(false)}
+                  className="ml-auto text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Period Info */}
+      <motion.div variants={itemVariants} className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-lg">
+          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground font-medium">
+            {dateRange.start.toLocaleDateString("pt-BR")} - {dateRange.end.toLocaleDateString("pt-BR")}
+          </span>
+        </div>
       </motion.div>
 
       {/* Stats Grid */}
@@ -174,6 +389,16 @@ export function DashboardPage() {
                     <p className="text-2xl font-semibold tracking-tight">
                       {stat.value}
                     </p>
+                    {stat.change && (
+                      <div className={`flex items-center gap-1 text-xs font-medium ${stat.change.positive ? "text-success" : "text-danger"}`}>
+                        {stat.change.positive ? (
+                          <TrendingUp className="h-3 w-3" />
+                        ) : (
+                          <TrendingUp className="h-3 w-3 rotate-180" />
+                        )}
+                        {stat.change.text} vs periodo anterior
+                      </div>
+                    )}
                   </div>
                   <div
                     className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.bg}`}
@@ -191,16 +416,16 @@ export function DashboardPage() {
           <Card>
             <div className="mb-6">
               <h2 className="text-base font-semibold text-foreground">
-                Desempenho Semanal
+                Desempenho
               </h2>
               <p className="text-sm text-muted-foreground">
-                Receita dos últimos 7 dias
+                Receita do periodo selecionado ({dateRange.label})
               </p>
             </div>
             {isLoading ? (
               <Skeleton className="h-64 w-full" />
             ) : (
-              <WeeklyChart orders={orders} />
+              <WeeklyChart orders={filteredOrders} dateRange={dateRange} />
             )}
           </Card>
         </motion.div>
@@ -212,7 +437,7 @@ export function DashboardPage() {
                 Pedidos Recentes
               </h2>
               <p className="text-sm text-muted-foreground">
-                Últimas atualizações
+                Ultimas atualizacoes
               </p>
             </div>
             {isLoading ? (
@@ -222,7 +447,7 @@ export function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <RecentOrders orders={orders} />
+              <RecentOrders orders={filteredOrders} />
             )}
           </Card>
         </motion.div>
