@@ -23,26 +23,13 @@ interface Conversation {
 
 // ── CSS Animations ──
 
-const STYLE_ID = "nova-ai-animations-v2";
+const STYLE_ID = "nova-ai-animations-v3";
 
 function injectAnimations() {
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
-    @keyframes gradient-shift {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-    @keyframes thinking-pulse {
-      0%, 100% { opacity: 0.4; }
-      50% { opacity: 1; }
-    }
-    @keyframes shimmer-line {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(200%); }
-    }
     @keyframes cursor-blink {
       0%, 100% { opacity: 1; }
       50% { opacity: 0; }
@@ -51,31 +38,12 @@ function injectAnimations() {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    .ai-gradient-text {
-      background: linear-gradient(90deg, #a855f7, #6366f1, #3b82f6, #a855f7);
-      background-size: 300% 100%;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: gradient-shift 4s ease infinite;
-    }
-    .ai-gradient-bar {
-      background: linear-gradient(90deg, #a855f7, #6366f1, #3b82f6, #a855f7);
-      background-size: 300% 100%;
-      animation: gradient-shift 2s ease infinite;
-    }
-    .ai-thinking-dot {
-      animation: thinking-pulse 1.2s infinite ease-in-out both;
-    }
-    .ai-thinking-dot:nth-child(1) { animation-delay: 0s; }
-    .ai-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
-    .ai-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
     .ai-cursor::after {
       content: '';
       display: inline-block;
       width: 2px;
       height: 1em;
-      background: #a855f7;
+      background: #4f46e5;
       margin-left: 2px;
       vertical-align: text-bottom;
       animation: cursor-blink 0.8s step-end infinite;
@@ -86,18 +54,18 @@ function injectAnimations() {
     /* Scrollbar */
     .ai-scroll::-webkit-scrollbar { width: 6px; }
     .ai-scroll::-webkit-scrollbar-track { background: transparent; }
-    .ai-scroll::-webkit-scrollbar-thumb { background: rgba(100,100,100,0.2); border-radius: 3px; }
-    .ai-scroll::-webkit-scrollbar-thumb:hover { background: rgba(100,100,100,0.35); }
+    .ai-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+    .ai-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
     /* Sidebar scrollbar */
     .ai-sidebar-scroll::-webkit-scrollbar { width: 4px; }
     .ai-sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
-    .ai-sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+    .ai-sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 2px; }
     /* Markdown */
     .ai-md p { margin-bottom: 0.6em; }
     .ai-md p:last-child { margin-bottom: 0; }
     .ai-md code {
-      background: rgba(139,92,246,0.1);
-      color: #c4b5fd;
+      background: #f1f5f9;
+      color: #4f46e5;
       padding: 0.15em 0.45em;
       border-radius: 5px;
       font-size: 0.87em;
@@ -105,7 +73,7 @@ function injectAnimations() {
     }
     .ai-md pre {
       background: #1e1b2e;
-      border: 1px solid rgba(139,92,246,0.15);
+      border: 1px solid #e2e8f0;
       padding: 1em;
       border-radius: 10px;
       overflow-x: auto;
@@ -118,17 +86,17 @@ function injectAnimations() {
     }
     .ai-md ul, .ai-md ol { padding-left: 1.5em; margin: 0.5em 0; }
     .ai-md li { margin-bottom: 0.3em; }
-    .ai-md strong { font-weight: 600; color: #f1f5f9; }
-    .ai-md em { color: #cbd5e1; }
-    .ai-md h1,.ai-md h2,.ai-md h3 { font-weight: 700; margin-top: 0.8em; margin-bottom: 0.3em; color: #f8fafc; }
+    .ai-md strong { font-weight: 600; color: #0a0a0a; }
+    .ai-md em { color: #525252; }
+    .ai-md h1,.ai-md h2,.ai-md h3 { font-weight: 700; margin-top: 0.8em; margin-bottom: 0.3em; color: #0a0a0a; }
     .ai-md h1 { font-size: 1.3em; }
     .ai-md h2 { font-size: 1.15em; }
     .ai-md h3 { font-size: 1.05em; }
     .ai-md blockquote {
-      border-left: 3px solid #7c3aed;
+      border-left: 3px solid #4f46e5;
       padding-left: 0.8em;
       margin: 0.5em 0;
-      color: #94a3b8;
+      color: #737373;
     }
   `;
   document.head.appendChild(style);
@@ -336,7 +304,7 @@ export function AIChatPage() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex h-full overflow-hidden relative" style={{ background: "#0f0d1a" }}>
+    <div className="flex h-full overflow-hidden relative bg-background">
       {/* ── Sidebar ── */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -347,21 +315,20 @@ export function AIChatPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSidebarOpen(false)}
-              className="absolute inset-0 bg-black/50 z-30 md:hidden"
+              className="absolute inset-0 bg-black/30 z-30 md:hidden"
             />
             <motion.aside
               initial={{ x: -280 }}
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: "spring", damping: 25, stiffness: 250 }}
-              className="absolute md:relative z-40 h-full w-[280px] flex flex-col shrink-0"
-              style={{ background: "#171428" }}
+              className="absolute md:relative z-40 h-full w-[280px] flex flex-col shrink-0 bg-card border-r border-border"
             >
               {/* New Chat Button */}
               <div className="p-3">
                 <button
                   onClick={newConversation}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-white/10 text-sm font-medium text-white/80 hover:bg-white/5 hover:border-white/20 transition-all"
+                  className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-muted transition-all"
                 >
                   <Plus className="h-4 w-4" />
                   Nova conversa
@@ -376,14 +343,14 @@ export function AIChatPage() {
                     onClick={() => { setActiveConvId(conv.id); setSidebarOpen(false); }}
                     className={`group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all text-sm ${
                       conv.id === activeConvId
-                        ? "bg-white/10 text-white"
-                        : "text-white/50 hover:text-white/80 hover:bg-white/5"
+                        ? "bg-accent-light text-accent font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     }`}
                   >
                     <span className="truncate flex-1">{conv.title}</span>
                     <button
                       onClick={e => { e.stopPropagation(); deleteConv(conv.id); }}
-                      className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400 transition-all shrink-0"
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger transition-all shrink-0"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -392,14 +359,14 @@ export function AIChatPage() {
               </div>
 
               {/* Sidebar footer */}
-              <div className="p-3 border-t border-white/5">
+              <div className="p-3 border-t border-border">
                 <div className="flex items-center gap-2.5 px-3 py-2">
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shrink-0">
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-accent to-indigo-600 flex items-center justify-center shrink-0">
                     <Sparkles className="h-4 w-4 text-white" />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-white/80">Nova IA</p>
-                    <p className="text-[10px] text-white/30">Nemotron 120B</p>
+                    <p className="text-xs font-semibold text-foreground">Nova IA</p>
+                    <p className="text-[10px] text-muted-foreground">Nemotron 120B</p>
                   </div>
                 </div>
               </div>
@@ -411,10 +378,10 @@ export function AIChatPage() {
       {/* ── Main Chat Area ── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: "#0f0d1a" }}>
+        <div className="flex items-center justify-between px-4 py-3 shrink-0 bg-background border-b border-border">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             <span className="text-sm font-medium hidden sm:inline">
@@ -425,7 +392,7 @@ export function AIChatPage() {
           {!sidebarOpen && (
             <button
               onClick={newConversation}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white/50 hover:text-white hover:bg-white/5 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <Plus className="h-3.5 w-3.5" />
               Nova conversa
@@ -446,16 +413,16 @@ export function AIChatPage() {
               >
                 {/* Logo */}
                 <div className="relative mx-auto w-20 h-20 mb-8">
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 opacity-25 blur-2xl scale-125" />
-                  <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-accent to-indigo-600 opacity-10 blur-2xl scale-125" />
+                  <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-indigo-600 flex items-center justify-center shadow-lg">
                     <Sparkles className="h-10 w-10 text-white" />
                   </div>
                 </div>
 
-                <h1 className="text-3xl font-bold text-white mb-2">
-                  Nova <span className="ai-gradient-text">IA</span>
+                <h1 className="text-3xl font-bold text-foreground mb-2">
+                  Nova <span className="text-accent">IA</span>
                 </h1>
-                <p className="text-white/40 text-sm mb-10 leading-relaxed">
+                <p className="text-muted-foreground text-sm mb-10 leading-relaxed">
                   Sua assistente inteligente para impulsionar seu negócio
                 </p>
 
@@ -468,12 +435,12 @@ export function AIChatPage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.15 + i * 0.06 }}
                       onClick={() => sendMessage(s.desc)}
-                      className="flex items-start gap-3 px-4 py-3.5 rounded-xl border border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all text-left group"
+                      className="flex items-start gap-3 px-4 py-3.5 rounded-xl border border-border bg-card hover:bg-muted transition-all text-left group shadow-xs"
                     >
                       <span className="text-lg mt-0.5 shrink-0">{s.emoji}</span>
                       <div>
-                        <p className="text-sm font-medium text-white/80 group-hover:text-white transition-colors">{s.title}</p>
-                        <p className="text-xs text-white/30 mt-0.5 line-clamp-2">{s.desc}</p>
+                        <p className="text-sm font-medium text-foreground group-hover:text-accent transition-colors">{s.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{s.desc}</p>
                       </div>
                     </motion.button>
                   ))}
@@ -503,26 +470,15 @@ export function AIChatPage() {
                       onCopy={copyMsg}
                     />
                   ) : (
-                    /* Thinking indicator */
+                    /* Thinking indicator - just plain text */
                     <div className="flex gap-4 py-5 px-2">
                       <div className="shrink-0 mt-1">
-                        <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                        <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-accent to-indigo-600 flex items-center justify-center">
                           <Sparkles className="h-3.5 w-3.5 text-white" />
                         </div>
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex items-center gap-1">
-                            <div className="h-1.5 w-1.5 rounded-full bg-purple-400 ai-thinking-dot" />
-                            <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 ai-thinking-dot" />
-                            <div className="h-1.5 w-1.5 rounded-full bg-blue-400 ai-thinking-dot" />
-                          </div>
-                          <span className="text-xs ai-gradient-text font-medium">Pensando...</span>
-                        </div>
-                        {/* Gradient progress bar */}
-                        <div className="mt-3 h-[2px] w-40 rounded-full overflow-hidden bg-white/5">
-                          <div className="h-full ai-gradient-bar rounded-full" />
-                        </div>
+                        <span className="text-sm text-muted-foreground italic">Pensando...</span>
                       </div>
                     </div>
                   )}
@@ -540,9 +496,9 @@ export function AIChatPage() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               onClick={() => scrollToBottom()}
-              className="absolute bottom-32 left-1/2 -translate-x-1/2 z-10 h-8 w-8 rounded-full bg-white/10 border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+              className="absolute bottom-32 left-1/2 -translate-x-1/2 z-10 h-8 w-8 rounded-full bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors shadow-sm"
             >
-              <ArrowDown className="h-3.5 w-3.5 text-white/70" />
+              <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
             </motion.button>
           )}
         </AnimatePresence>
@@ -554,12 +510,11 @@ export function AIChatPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
-              className="mx-4 mb-2 flex items-center gap-2.5 rounded-xl px-4 py-2.5"
-              style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}
+              className="mx-4 mb-2 flex items-center gap-2.5 rounded-xl px-4 py-2.5 bg-danger-light border border-danger/20"
             >
-              <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
-              <p className="text-sm text-red-300 flex-1">{error}</p>
-              <button onClick={() => setError(null)} className="text-red-400/60 hover:text-red-300">
+              <AlertCircle className="h-4 w-4 text-danger shrink-0" />
+              <p className="text-sm text-danger flex-1">{error}</p>
+              <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">
                 <X className="h-4 w-4" />
               </button>
             </motion.div>
@@ -571,7 +526,7 @@ export function AIChatPage() {
           <div className="flex justify-center mb-2">
             <button
               onClick={retryLast}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 text-sm font-medium text-white/70 hover:bg-white/10 transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-muted text-sm font-medium text-foreground hover:bg-border transition-colors"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Tentar novamente
@@ -583,11 +538,7 @@ export function AIChatPage() {
         <div className="shrink-0 px-4 pb-4 pt-2">
           <div className="max-w-3xl mx-auto">
             <div
-              className="relative flex items-end gap-2 rounded-2xl p-2 transition-all"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
+              className="relative flex items-end gap-2 rounded-2xl p-2 transition-all bg-card border border-border shadow-sm"
             >
               <textarea
                 ref={inputRef}
@@ -597,25 +548,25 @@ export function AIChatPage() {
                 placeholder="Envie uma mensagem..."
                 rows={1}
                 disabled={isStreaming}
-                className="flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-white/90 placeholder:text-white/25 focus:outline-none disabled:opacity-40 max-h-[200px]"
+                className="flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-40 max-h-[200px]"
               />
               <button
                 onClick={() => sendMessage()}
                 disabled={!input.trim() || isStreaming}
                 className={`shrink-0 h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
                   input.trim() && !isStreaming
-                    ? "bg-white text-[#0f0d1a] hover:bg-white/90 active:scale-95"
-                    : "bg-white/5 text-white/20 cursor-not-allowed"
+                    ? "bg-accent text-white hover:bg-accent/90 active:scale-95"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
                 }`}
               >
                 {isStreaming ? (
-                  <div className="h-4 w-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+                  <div className="h-4 w-4 border-2 border-muted-foreground/30 border-t-accent rounded-full animate-spin" />
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
               </button>
             </div>
-            <p className="text-center text-[10px] text-white/20 mt-2.5">
+            <p className="text-center text-[10px] text-muted-foreground mt-2.5">
               Nova IA pode cometer erros. Verifique informações importantes.
             </p>
           </div>
@@ -625,7 +576,7 @@ export function AIChatPage() {
   );
 }
 
-// ── Message Row (ChatGPT style: full-width rows, avatar on left for AI) ──
+// ── Message Row ──
 
 function MessageRow({
   msg,
@@ -645,8 +596,7 @@ function MessageRow({
       {/* User message */}
       {isUser && (
         <div className="flex justify-end">
-          <div className="max-w-[85%] rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed text-white"
-            style={{ background: "rgba(139,92,246,0.2)" }}
+          <div className="max-w-[85%] rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed text-white bg-accent"
           >
             <p className="whitespace-pre-wrap">{msg.content}</p>
           </div>
@@ -658,13 +608,13 @@ function MessageRow({
         <div className="flex gap-4 px-2">
           {/* Avatar */}
           <div className="shrink-0 mt-1">
-            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-accent to-indigo-600 flex items-center justify-center">
               <Sparkles className="h-3.5 w-3.5 text-white" />
             </div>
           </div>
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className={`text-sm leading-relaxed text-white/85 ai-md ${isStreaming ? "ai-cursor" : ""}`}
+            <div className={`text-sm leading-relaxed text-foreground ai-md ${isStreaming ? "ai-cursor" : ""}`}
               dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
             />
             {/* Actions */}
@@ -672,7 +622,7 @@ function MessageRow({
               <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => onCopy(msg.id, msg.content)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-white/30 hover:text-white/70 hover:bg-white/5 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
                   {copiedId === msg.id ? (
                     <><Check className="h-3 w-3" /> Copiado</>

@@ -3,6 +3,8 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   updateProfile,
   type User,
@@ -15,10 +17,16 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, displayName?: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+const googleProvider = new GoogleAuthProvider();
+// Request profile info
+googleProvider.addScope("profile");
+googleProvider.addScope("email");
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -50,6 +58,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log("[Auth] Signup successful:", credential.user.email);
   };
 
+  const loginWithGoogle = async () => {
+    const credential = await signInWithPopup(auth, googleProvider);
+    setMerchantId(credential.user.uid);
+    console.log("[Auth] Google login successful:", credential.user.email);
+  };
+
   const logout = async () => {
     setMerchantId(null);
     await signOut(auth);
@@ -57,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );
