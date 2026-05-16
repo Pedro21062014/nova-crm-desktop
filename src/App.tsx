@@ -10,6 +10,7 @@ import { CouponsPage } from "@/components/coupons/CouponsPage";
 import { ChatPage } from "@/components/chat/ChatPage";
 import { WhatsAppPage } from "@/components/whatsapp/WhatsAppPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
+import { AIChatPage } from "@/components/ai/AIChatPage";
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
@@ -40,6 +41,7 @@ function ProtectedRoutes() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/whatsapp" element={<WhatsAppPage />} />
         <Route path="/configuracoes" element={<SettingsPage />} />
+        <Route path="/ia" element={<AIChatPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
