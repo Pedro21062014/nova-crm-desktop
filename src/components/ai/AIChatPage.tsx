@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Send, Sparkles, Trash2, Bot, User, AlertCircle, X,
+  Send, Sparkles, Trash2, Plus, AlertCircle, X,
   ArrowDown, RotateCcw, Copy, Check,
 } from "lucide-react";
 
@@ -14,10 +14,16 @@ interface ChatMessage {
   timestamp: number;
 }
 
-// ── Gradient Animation Keyframes (CSS) ──
-// Injected once via useEffect
+interface Conversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: number;
+}
 
-const STYLE_ID = "nova-ai-animations";
+// ── CSS Animations ──
+
+const STYLE_ID = "nova-ai-animations-v2";
 
 function injectAnimations() {
   if (document.getElementById(STYLE_ID)) return;
@@ -29,23 +35,22 @@ function injectAnimations() {
       50% { background-position: 100% 50%; }
       100% { background-position: 0% 50%; }
     }
-    @keyframes thinking-bounce {
-      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-      40% { transform: scale(1); opacity: 1; }
+    @keyframes thinking-pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
     }
     @keyframes shimmer-line {
       0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
+      100% { transform: translateX(200%); }
     }
-    @keyframes fade-in-up {
-      from { opacity: 0; transform: translateY(8px); }
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    .ai-thinking-dot {
-      animation: thinking-bounce 1.4s infinite ease-in-out both;
-    }
-    .ai-thinking-dot:nth-child(1) { animation-delay: -0.32s; }
-    .ai-thinking-dot:nth-child(2) { animation-delay: -0.16s; }
     .ai-gradient-text {
       background: linear-gradient(90deg, #a855f7, #6366f1, #3b82f6, #a855f7);
       background-size: 300% 100%;
@@ -59,146 +64,165 @@ function injectAnimations() {
       background-size: 300% 100%;
       animation: gradient-shift 2s ease infinite;
     }
-    .ai-shimmer {
-      position: relative;
-      overflow: hidden;
+    .ai-thinking-dot {
+      animation: thinking-pulse 1.2s infinite ease-in-out both;
     }
-    .ai-shimmer::after {
+    .ai-thinking-dot:nth-child(1) { animation-delay: 0s; }
+    .ai-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+    .ai-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+    .ai-cursor::after {
       content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
-      animation: shimmer-line 2s infinite;
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: #a855f7;
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: cursor-blink 0.8s step-end infinite;
     }
-    .ai-msg-enter {
-      animation: fade-in-up 0.3s ease-out;
+    .ai-fade-in {
+      animation: fade-in 0.25s ease-out;
     }
-    /* Custom scrollbar */
-    .ai-chat-scroll::-webkit-scrollbar { width: 6px; }
-    .ai-chat-scroll::-webkit-scrollbar-track { background: transparent; }
-    .ai-chat-scroll::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.25); border-radius: 3px; }
-    .ai-chat-scroll::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.4); }
-    /* Markdown-ish formatting */
-    .ai-content p { margin-bottom: 0.5em; }
-    .ai-content p:last-child { margin-bottom: 0; }
-    .ai-content code {
-      background: rgba(139,92,246,0.12);
-      padding: 0.15em 0.4em;
-      border-radius: 4px;
-      font-size: 0.88em;
-      font-family: 'SFMono-Regular', Consolas, monospace;
+    /* Scrollbar */
+    .ai-scroll::-webkit-scrollbar { width: 6px; }
+    .ai-scroll::-webkit-scrollbar-track { background: transparent; }
+    .ai-scroll::-webkit-scrollbar-thumb { background: rgba(100,100,100,0.2); border-radius: 3px; }
+    .ai-scroll::-webkit-scrollbar-thumb:hover { background: rgba(100,100,100,0.35); }
+    /* Sidebar scrollbar */
+    .ai-sidebar-scroll::-webkit-scrollbar { width: 4px; }
+    .ai-sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+    .ai-sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+    /* Markdown */
+    .ai-md p { margin-bottom: 0.6em; }
+    .ai-md p:last-child { margin-bottom: 0; }
+    .ai-md code {
+      background: rgba(139,92,246,0.1);
+      color: #c4b5fd;
+      padding: 0.15em 0.45em;
+      border-radius: 5px;
+      font-size: 0.87em;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
     }
-    .ai-content pre {
-      background: rgba(0,0,0,0.3);
+    .ai-md pre {
+      background: #1e1b2e;
+      border: 1px solid rgba(139,92,246,0.15);
       padding: 1em;
-      border-radius: 8px;
+      border-radius: 10px;
       overflow-x: auto;
       margin: 0.75em 0;
     }
-    .ai-content pre code {
+    .ai-md pre code {
       background: none;
       padding: 0;
+      color: #e2e8f0;
     }
-    .ai-content ul, .ai-content ol {
-      padding-left: 1.5em;
+    .ai-md ul, .ai-md ol { padding-left: 1.5em; margin: 0.5em 0; }
+    .ai-md li { margin-bottom: 0.3em; }
+    .ai-md strong { font-weight: 600; color: #f1f5f9; }
+    .ai-md em { color: #cbd5e1; }
+    .ai-md h1,.ai-md h2,.ai-md h3 { font-weight: 700; margin-top: 0.8em; margin-bottom: 0.3em; color: #f8fafc; }
+    .ai-md h1 { font-size: 1.3em; }
+    .ai-md h2 { font-size: 1.15em; }
+    .ai-md h3 { font-size: 1.05em; }
+    .ai-md blockquote {
+      border-left: 3px solid #7c3aed;
+      padding-left: 0.8em;
       margin: 0.5em 0;
-    }
-    .ai-content li { margin-bottom: 0.25em; }
-    .ai-content strong { font-weight: 600; }
-    .ai-content h1,.ai-content h2,.ai-content h3 {
-      font-weight: 600;
-      margin-top: 0.75em;
-      margin-bottom: 0.25em;
+      color: #94a3b8;
     }
   `;
   document.head.appendChild(style);
 }
 
-// ── Simple Markdown renderer ──
+// ── Markdown ──
 
 function renderMarkdown(text: string): string {
   let html = text
-    // Code blocks
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-    // Inline code
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Bold
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    // Italic
     .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
-    // Headers
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // Unordered lists
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
     .replace(/^[\-\*] (.+)$/gm, '<li>$1</li>')
-    // Ordered lists
     .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    // Line breaks → paragraphs
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br/>');
-
-  // Wrap loose <li> in <ul>
   html = html.replace(/((?:<li>.*<\/li>\s*)+)/g, '<ul>$1</ul>');
-  // Wrap in paragraph if not already wrapped
   if (!html.startsWith('<')) html = '<p>' + html + '</p>';
-
   return html;
 }
 
-// ── Suggestion chips ──
+// ── Suggestions ──
 
 const suggestions = [
-  { icon: "💡", text: "Ideias para aumentar minhas vendas" },
-  { icon: "📱", text: "Como melhorar minha presença digital" },
-  { icon: "📊", text: "Analise métricas do meu negócio" },
-  { icon: "🎯", text: "Crie uma estratégia de marketing" },
-  { icon: "💰", text: "Dicas para fidelizar clientes" },
-  { icon: "🚀", text: "Como escalar meu negócio" },
+  { emoji: "💡", title: "Aumentar vendas", desc: "Ideias práticas para aumentar minhas vendas" },
+  { emoji: "📱", title: "Presença digital", desc: "Como melhorar minha presença online" },
+  { emoji: "📊", title: "Análise de métricas", desc: "Ajude-me a analisar métricas do meu negócio" },
+  { emoji: "🎯", title: "Estratégia de marketing", desc: "Crie uma estratégia de marketing eficaz" },
 ];
 
 // ── Main Component ──
 
 export function AIChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Inject CSS animations
+  const activeConv = conversations.find(c => c.id === activeConvId);
+  const messages = activeConv?.messages || [];
+
   useEffect(() => { injectAnimations(); }, []);
 
-  // Auto-scroll to bottom
+  // Scroll helpers
   const scrollToBottom = useCallback((smooth = true) => {
-    const el = chatContainerRef.current;
+    const el = chatRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
   }, []);
 
-  // Track scroll position for "scroll to bottom" button
   useEffect(() => {
-    const el = chatContainerRef.current;
+    const el = chatRef.current;
     if (!el) return;
-    const handleScroll = () => {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-      setShowScrollDown(!nearBottom);
-    };
-    el.addEventListener("scroll", handleScroll);
-    return () => el.removeEventListener("scroll", handleScroll);
-  }, []);
+    const onScroll = () => setShowScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 100);
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [activeConvId]);
 
-  // Auto-scroll when new content arrives
+  useEffect(() => { scrollToBottom(); }, [messages.length, streamingContent, isStreaming, scrollToBottom]);
+
+  // Auto-resize textarea
   useEffect(() => {
-    if (isStreaming || messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages, streamingContent, isStreaming, scrollToBottom]);
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }, [input]);
+
+  // ── New conversation ──
+  const newConversation = () => {
+    const conv: Conversation = {
+      id: Date.now().toString(),
+      title: "Nova conversa",
+      messages: [],
+      createdAt: Date.now(),
+    };
+    setConversations(prev => [conv, ...prev]);
+    setActiveConvId(conv.id);
+    setStreamingContent("");
+    setError(null);
+  };
 
   // ── Send message ──
   const sendMessage = useCallback(async (text?: string) => {
@@ -208,61 +232,67 @@ export function AIChatPage() {
     setInput("");
     setError(null);
 
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-      timestamp: Date.now(),
-    };
+    // Create conversation if needed
+    let convId = activeConvId;
+    let convs = [...conversations];
 
-    const updatedMessages = [...messages, userMsg];
-    setMessages(updatedMessages);
+    if (!convId) {
+      const conv: Conversation = {
+        id: Date.now().toString(),
+        title: content.slice(0, 40) + (content.length > 40 ? "..." : ""),
+        messages: [],
+        createdAt: Date.now(),
+      };
+      convs = [conv, ...convs];
+      convId = conv.id;
+      setActiveConvId(convId);
+    }
+
+    const userMsg: ChatMessage = { id: Date.now().toString(), role: "user", content, timestamp: Date.now() };
+
+    setConversations(prev => prev.map(c =>
+      c.id === convId ? { ...c, messages: [...c.messages, userMsg], title: c.messages.length === 0 ? content.slice(0, 40) + (content.length > 40 ? "..." : "") : c.title } : c
+    ));
+
     setIsStreaming(true);
     setStreamingContent("");
 
-    // Build API messages array
+    const allMessages = [...(convs.find(c => c.id === convId)?.messages || []), userMsg];
+
     const apiMessages = [
-      {
-        role: "system",
-        content: "Você é a Nova IA, uma assistente inteligente e amigável do Nova CRM. Você ajuda lojistas e empreendedores com dicas de negócios, marketing, vendas, atendimento ao cliente e gestão. Responda sempre em português brasileiro, de forma clara e prática. Use emojis com moderação para tornar a conversa mais agradável.",
-      },
-      ...updatedMessages.map(m => ({ role: m.role, content: m.content })),
+      { role: "system", content: "Você é a Nova IA, uma assistente inteligente e amigável do Nova CRM. Você ajuda lojistas e empreendedores com dicas de negócios, marketing, vendas, atendimento ao cliente e gestão. Responda sempre em português brasileiro, de forma clara, prática e bem estruturada. Use formatação Markdown quando útil." },
+      ...allMessages.map(m => ({ role: m.role, content: m.content })),
     ];
 
     try {
       const api = (window as any).electronAPI;
-      if (!api?.aiChat) {
-        throw new Error("API de IA não disponível. Verifique se o app está atualizado.");
-      }
+      if (!api?.aiChat) throw new Error("API de IA não disponível.");
 
-      // Set up streaming listeners
+      let accumulated = "";
+
       const removeChunk = api.onAiChunk((chunk: string) => {
-        setStreamingContent(prev => prev + chunk);
+        accumulated += chunk;
+        setStreamingContent(accumulated);
       });
+
       const removeDone = api.onAiDone(() => {
-        setStreamingContent(prev => {
-          const assistantMsg: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            role: "assistant",
-            content: prev,
-            timestamp: Date.now(),
-          };
-          setMessages(msgs => [...msgs, assistantMsg]);
-          return "";
-        });
+        const assistantMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: "assistant", content: accumulated, timestamp: Date.now() };
+        setConversations(prev => prev.map(c =>
+          c.id === convId ? { ...c, messages: [...c.messages, assistantMsg] } : c
+        ));
+        setStreamingContent("");
         setIsStreaming(false);
-        removeChunk();
-        removeDone();
-        removeError();
+        cleanup();
       });
+
       const removeError = api.onAiError((err: string) => {
         setError(err);
         setIsStreaming(false);
         setStreamingContent("");
-        removeChunk();
-        removeDone();
-        removeError();
+        cleanup();
       });
+
+      const cleanup = () => { removeChunk(); removeDone(); removeError(); };
 
       await api.aiChat(apiMessages);
     } catch (err: any) {
@@ -270,287 +300,334 @@ export function AIChatPage() {
       setIsStreaming(false);
       setStreamingContent("");
     }
-  }, [input, messages, isStreaming]);
+  }, [input, conversations, activeConvId, isStreaming]);
 
-  // ── Clear chat ──
-  const clearChat = () => {
-    setMessages([]);
-    setStreamingContent("");
-    setError(null);
-    setIsStreaming(false);
-    const api = (window as any).electronAPI;
-    api?.removeAllAiListeners?.();
+  // ── Delete conversation ──
+  const deleteConv = (id: string) => {
+    setConversations(prev => prev.filter(c => c.id !== id));
+    if (activeConvId === id) setActiveConvId(null);
   };
 
-  // ── Copy message ──
-  const copyMessage = (id: string, content: string) => {
+  // ── Copy ──
+  const copyMsg = (id: string, content: string) => {
     navigator.clipboard.writeText(content);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // ── Retry last message ──
+  // ── Retry ──
   const retryLast = () => {
-    if (messages.length === 0) return;
-    const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
-    if (!lastUserMsg) return;
-    // Remove last assistant message
-    setMessages(prev => {
-      const newMsgs = [...prev];
-      const lastIdx = newMsgs.findLastIndex(m => m.role === "assistant");
-      if (lastIdx >= 0) newMsgs.splice(lastIdx, 1);
-      return newMsgs;
-    });
-    // Re-send
-    setTimeout(() => sendMessage(lastUserMsg.content), 100);
+    if (!activeConv) return;
+    const lastUser = [...activeConv.messages].reverse().find(m => m.role === "user");
+    if (!lastUser) return;
+    setConversations(prev => prev.map(c => {
+      if (c.id !== activeConvId) return c;
+      const lastAi = c.messages.findLastIndex(m => m.role === "assistant");
+      if (lastAi >= 0) return { ...c, messages: c.messages.slice(0, lastAi) };
+      return c;
+    }));
+    setTimeout(() => sendMessage(lastUser.content), 100);
   };
 
-  // ── Handle keyboard ──
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
-
-  // ── Auto-resize textarea ──
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 150) + "px";
-  }, [input]);
 
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
-              <Sparkles className="h-5 w-5 text-white" />
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-400 border-2 border-card" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-foreground tracking-tight">Nova IA</h1>
-            <p className="text-xs text-muted-foreground">
-              {isStreaming ? (
-                <span className="ai-gradient-text font-medium">Pensando...</span>
-              ) : (
-                "Assistente inteligente para seu negócio"
-              )}
-            </p>
-          </div>
-        </div>
-        {hasMessages && (
-          <button
-            onClick={clearChat}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-danger hover:bg-danger-light transition-colors"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Limpar
-          </button>
-        )}
-      </div>
-
-      {/* ── Chat Area ── */}
-      <div
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto ai-chat-scroll"
-      >
-        {!hasMessages ? (
-          /* ── Welcome Screen ── */
-          <div className="flex flex-col items-center justify-center h-full px-6 py-12">
+    <div className="flex h-full overflow-hidden relative" style={{ background: "#0f0d1a" }}>
+      {/* ── Sidebar ── */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <>
+            {/* Backdrop on mobile */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="text-center max-w-lg"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSidebarOpen(false)}
+              className="absolute inset-0 bg-black/50 z-30 md:hidden"
+            />
+            <motion.aside
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ type: "spring", damping: 25, stiffness: 250 }}
+              className="absolute md:relative z-40 h-full w-[280px] flex flex-col shrink-0"
+              style={{ background: "#171428" }}
             >
-              {/* Logo grande com gradiente */}
-              <div className="relative mx-auto w-24 h-24 mb-6">
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 opacity-20 blur-xl scale-110" />
-                <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 flex items-center justify-center shadow-xl shadow-purple-500/25 ai-shimmer">
-                  <Sparkles className="h-11 w-11 text-white" />
-                </div>
+              {/* New Chat Button */}
+              <div className="p-3">
+                <button
+                  onClick={newConversation}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-white/10 text-sm font-medium text-white/80 hover:bg-white/5 hover:border-white/20 transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nova conversa
+                </button>
               </div>
 
-              <h2 className="text-2xl font-bold text-foreground mb-2">
-                Olá! Eu sou a <span className="ai-gradient-text">Nova IA</span>
-              </h2>
-              <p className="text-muted-foreground text-sm mb-8 leading-relaxed">
-                Sua assistente inteligente para impulsionar seu negócio.
-                Posso ajudar com estratégias de vendas, marketing, atendimento e muito mais.
-              </p>
-
-              {/* Suggestion chips */}
-              <div className="grid grid-cols-2 gap-2.5 max-w-md mx-auto">
-                {suggestions.map((s, i) => (
-                  <motion.button
-                    key={i}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 + i * 0.05 }}
-                    onClick={() => sendMessage(s.text)}
-                    className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-border bg-card hover:bg-muted hover:border-purple-500/30 transition-all text-left group"
+              {/* Conversations list */}
+              <div className="flex-1 overflow-y-auto ai-sidebar-scroll px-2 pb-3 space-y-0.5">
+                {conversations.map(conv => (
+                  <div
+                    key={conv.id}
+                    onClick={() => { setActiveConvId(conv.id); setSidebarOpen(false); }}
+                    className={`group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all text-sm ${
+                      conv.id === activeConvId
+                        ? "bg-white/10 text-white"
+                        : "text-white/50 hover:text-white/80 hover:bg-white/5"
+                    }`}
                   >
-                    <span className="text-base shrink-0">{s.icon}</span>
-                    <span className="text-xs font-medium text-foreground/80 group-hover:text-foreground line-clamp-2">{s.text}</span>
-                  </motion.button>
+                    <span className="truncate flex-1">{conv.title}</span>
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteConv(conv.id); }}
+                      className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400 transition-all shrink-0"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 ))}
               </div>
-            </motion.div>
-          </div>
-        ) : (
-          /* ── Messages ── */
-          <div className="max-w-3xl mx-auto px-4 py-6 space-y-1">
-            {messages.map((msg) => (
-              <MessageBubble
-                key={msg.id}
-                msg={msg}
-                copiedId={copiedId}
-                onCopy={copyMessage}
-              />
-            ))}
 
-            {/* Streaming message */}
-            {isStreaming && (
-              <div className="ai-msg-enter">
-                {streamingContent ? (
-                  <MessageBubble
-                    msg={{
-                      id: "streaming",
-                      role: "assistant",
-                      content: streamingContent,
-                      timestamp: Date.now(),
-                    }}
-                    isStreaming
-                    copiedId={copiedId}
-                    onCopy={copyMessage}
-                  />
-                ) : (
-                  /* Thinking animation */
-                  <div className="flex gap-3 py-4">
-                    <div className="shrink-0">
-                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 flex items-center justify-center">
-                        <Sparkles className="h-4 w-4 text-white" />
-                      </div>
-                    </div>
-                    <div className="flex-1 pt-1.5">
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-muted/60">
-                          <div className="h-2 w-2 rounded-full bg-purple-400 ai-thinking-dot" />
-                          <div className="h-2 w-2 rounded-full bg-indigo-400 ai-thinking-dot" />
-                          <div className="h-2 w-2 rounded-full bg-blue-400 ai-thinking-dot" />
-                        </div>
-                        <span className="text-xs text-muted-foreground ai-gradient-text font-medium">
-                          Pensando...
-                        </span>
-                      </div>
-                      {/* Shimmer bar */}
-                      <div className="mt-3 h-1 w-48 rounded-full overflow-hidden bg-muted">
-                        <div className="h-full ai-gradient-bar rounded-full" />
-                      </div>
-                    </div>
+              {/* Sidebar footer */}
+              <div className="p-3 border-t border-white/5">
+                <div className="flex items-center gap-2.5 px-3 py-2">
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shrink-0">
+                    <Sparkles className="h-4 w-4 text-white" />
                   </div>
-                )}
+                  <div>
+                    <p className="text-xs font-semibold text-white/80">Nova IA</p>
+                    <p className="text-[10px] text-white/30">Nemotron 120B</p>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── Scroll to bottom button ── */}
-      <AnimatePresence>
-        {showScrollDown && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            onClick={() => scrollToBottom()}
-            className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10 h-8 w-8 rounded-full bg-card border border-border shadow-md flex items-center justify-center hover:bg-muted transition-colors"
-          >
-            <ArrowDown className="h-3.5 w-3.5 text-foreground" />
-          </motion.button>
+            </motion.aside>
+          </>
         )}
       </AnimatePresence>
 
-      {/* ── Error Banner ── */}
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="mx-6 mb-2 flex items-center gap-3 rounded-xl bg-danger-light border border-danger/20 px-4 py-3"
-          >
-            <AlertCircle className="h-4 w-4 text-danger shrink-0" />
-            <p className="text-sm text-danger flex-1">{error}</p>
-            <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">
-              <X className="h-4 w-4" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Retry button ── */}
-      {error && !isStreaming && messages.length > 0 && (
-        <div className="flex justify-center mb-2">
+      {/* ── Main Chat Area ── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: "#0f0d1a" }}>
           <button
-            onClick={retryLast}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-muted text-sm font-medium text-foreground hover:bg-border transition-colors"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-colors"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Tentar novamente
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            <span className="text-sm font-medium hidden sm:inline">
+              {activeConv?.title || "Nova IA"}
+            </span>
           </button>
-        </div>
-      )}
 
-      {/* ── Input Area ── */}
-      <div className="shrink-0 px-6 pb-6 pt-3">
-        <div className="max-w-3xl mx-auto">
-          <div className="relative flex items-end gap-2 rounded-2xl border border-border bg-card p-2 shadow-sm focus-within:border-purple-500/40 focus-within:shadow-lg focus-within:shadow-purple-500/5 transition-all">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Pergunte algo sobre seu negócio..."
-              rows={1}
-              disabled={isStreaming}
-              className="flex-1 resize-none bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50 max-h-[150px]"
-            />
+          {!sidebarOpen && (
             <button
-              onClick={() => sendMessage()}
-              disabled={!input.trim() || isStreaming}
-              className={`shrink-0 h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
-                input.trim() && !isStreaming
-                  ? "bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 text-white shadow-md shadow-purple-500/25 hover:shadow-lg hover:shadow-purple-500/30 hover:scale-105 active:scale-95"
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              }`}
+              onClick={newConversation}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white/50 hover:text-white hover:bg-white/5 transition-colors"
             >
-              {isStreaming ? (
-                <div className="h-4 w-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
+              Nova conversa
+            </button>
+          )}
+        </div>
+
+        {/* ── Chat Messages ── */}
+        <div ref={chatRef} className="flex-1 overflow-y-auto ai-scroll">
+          {!hasMessages && !isStreaming ? (
+            /* ── Empty State ── */
+            <div className="flex flex-col items-center justify-center h-full px-6">
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="text-center max-w-xl"
+              >
+                {/* Logo */}
+                <div className="relative mx-auto w-20 h-20 mb-8">
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 opacity-25 blur-2xl scale-125" />
+                  <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 flex items-center justify-center">
+                    <Sparkles className="h-10 w-10 text-white" />
+                  </div>
+                </div>
+
+                <h1 className="text-3xl font-bold text-white mb-2">
+                  Nova <span className="ai-gradient-text">IA</span>
+                </h1>
+                <p className="text-white/40 text-sm mb-10 leading-relaxed">
+                  Sua assistente inteligente para impulsionar seu negócio
+                </p>
+
+                {/* Suggestion cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto">
+                  {suggestions.map((s, i) => (
+                    <motion.button
+                      key={i}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15 + i * 0.06 }}
+                      onClick={() => sendMessage(s.desc)}
+                      className="flex items-start gap-3 px-4 py-3.5 rounded-xl border border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all text-left group"
+                    >
+                      <span className="text-lg mt-0.5 shrink-0">{s.emoji}</span>
+                      <div>
+                        <p className="text-sm font-medium text-white/80 group-hover:text-white transition-colors">{s.title}</p>
+                        <p className="text-xs text-white/30 mt-0.5 line-clamp-2">{s.desc}</p>
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            </div>
+          ) : (
+            /* ── Messages List ── */
+            <div className="max-w-3xl mx-auto px-4 py-4">
+              {messages.map((msg) => (
+                <MessageRow
+                  key={msg.id}
+                  msg={msg}
+                  copiedId={copiedId}
+                  onCopy={copyMsg}
+                />
+              ))}
+
+              {/* Streaming */}
+              {isStreaming && (
+                <div className="ai-fade-in">
+                  {streamingContent ? (
+                    <MessageRow
+                      msg={{ id: "streaming", role: "assistant", content: streamingContent, timestamp: Date.now() }}
+                      isStreaming
+                      copiedId={copiedId}
+                      onCopy={copyMsg}
+                    />
+                  ) : (
+                    /* Thinking indicator */
+                    <div className="flex gap-4 py-5 px-2">
+                      <div className="shrink-0 mt-1">
+                        <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                          <Sparkles className="h-3.5 w-3.5 text-white" />
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-1">
+                            <div className="h-1.5 w-1.5 rounded-full bg-purple-400 ai-thinking-dot" />
+                            <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 ai-thinking-dot" />
+                            <div className="h-1.5 w-1.5 rounded-full bg-blue-400 ai-thinking-dot" />
+                          </div>
+                          <span className="text-xs ai-gradient-text font-medium">Pensando...</span>
+                        </div>
+                        {/* Gradient progress bar */}
+                        <div className="mt-3 h-[2px] w-40 rounded-full overflow-hidden bg-white/5">
+                          <div className="h-full ai-gradient-bar rounded-full" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Scroll to bottom ── */}
+        <AnimatePresence>
+          {showScrollDown && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              onClick={() => scrollToBottom()}
+              className="absolute bottom-32 left-1/2 -translate-x-1/2 z-10 h-8 w-8 rounded-full bg-white/10 border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+            >
+              <ArrowDown className="h-3.5 w-3.5 text-white/70" />
+            </motion.button>
+          )}
+        </AnimatePresence>
+
+        {/* ── Error ── */}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              className="mx-4 mb-2 flex items-center gap-2.5 rounded-xl px-4 py-2.5"
+              style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}
+            >
+              <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+              <p className="text-sm text-red-300 flex-1">{error}</p>
+              <button onClick={() => setError(null)} className="text-red-400/60 hover:text-red-300">
+                <X className="h-4 w-4" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Retry */}
+        {error && !isStreaming && hasMessages && (
+          <div className="flex justify-center mb-2">
+            <button
+              onClick={retryLast}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 text-sm font-medium text-white/70 hover:bg-white/10 transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Tentar novamente
             </button>
           </div>
-          <p className="text-center text-[10px] text-muted-foreground/60 mt-2">
-            Nova IA pode cometer erros. Verifique informações importantes.
-          </p>
+        )}
+
+        {/* ── Input Area ── */}
+        <div className="shrink-0 px-4 pb-4 pt-2">
+          <div className="max-w-3xl mx-auto">
+            <div
+              className="relative flex items-end gap-2 rounded-2xl p-2 transition-all"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Envie uma mensagem..."
+                rows={1}
+                disabled={isStreaming}
+                className="flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-white/90 placeholder:text-white/25 focus:outline-none disabled:opacity-40 max-h-[200px]"
+              />
+              <button
+                onClick={() => sendMessage()}
+                disabled={!input.trim() || isStreaming}
+                className={`shrink-0 h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
+                  input.trim() && !isStreaming
+                    ? "bg-white text-[#0f0d1a] hover:bg-white/90 active:scale-95"
+                    : "bg-white/5 text-white/20 cursor-not-allowed"
+                }`}
+              >
+                {isStreaming ? (
+                  <div className="h-4 w-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            <p className="text-center text-[10px] text-white/20 mt-2.5">
+              Nova IA pode cometer erros. Verifique informações importantes.
+            </p>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Message Bubble Component ──
+// ── Message Row (ChatGPT style: full-width rows, avatar on left for AI) ──
 
-function MessageBubble({
+function MessageRow({
   msg,
   isStreaming,
   copiedId,
@@ -564,57 +641,47 @@ function MessageBubble({
   const isUser = msg.role === "user";
 
   return (
-    <div className={`flex gap-3 py-3 ai-msg-enter group ${isUser ? "justify-end" : ""}`}>
-      {/* AI avatar */}
-      {!isUser && (
-        <div className="shrink-0 mt-0.5">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 flex items-center justify-center">
-            <Sparkles className="h-4 w-4 text-white" />
+    <div className={`py-4 ai-fade-in group ${isUser ? "" : ""}`}>
+      {/* User message */}
+      {isUser && (
+        <div className="flex justify-end">
+          <div className="max-w-[85%] rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed text-white"
+            style={{ background: "rgba(139,92,246,0.2)" }}
+          >
+            <p className="whitespace-pre-wrap">{msg.content}</p>
           </div>
         </div>
       )}
 
-      <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
-        {/* Message content */}
-        <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-            isUser
-              ? "bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 text-white rounded-br-md"
-              : "bg-muted/60 text-foreground rounded-bl-md"
-          }`}
-        >
-          {isUser ? (
-            <p className="whitespace-pre-wrap">{msg.content}</p>
-          ) : (
-            <div
-              className={`ai-content ${isStreaming ? "ai-gradient-text" : ""}`}
+      {/* AI message */}
+      {!isUser && (
+        <div className="flex gap-4 px-2">
+          {/* Avatar */}
+          <div className="shrink-0 mt-1">
+            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+              <Sparkles className="h-3.5 w-3.5 text-white" />
+            </div>
+          </div>
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className={`text-sm leading-relaxed text-white/85 ai-md ${isStreaming ? "ai-cursor" : ""}`}
               dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
             />
-          )}
-        </div>
-
-        {/* Actions for assistant messages */}
-        {!isUser && !isStreaming && (
-          <div className="flex items-center gap-1 mt-1.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={() => onCopy(msg.id, msg.content)}
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              {copiedId === msg.id ? (
-                <><Check className="h-3 w-3" /> Copiado</>
-              ) : (
-                <><Copy className="h-3 w-3" /> Copiar</>
-              )}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* User avatar */}
-      {isUser && (
-        <div className="shrink-0 mt-0.5">
-          <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
-            <User className="h-4 w-4 text-muted-foreground" />
+            {/* Actions */}
+            {!isStreaming && msg.id !== "streaming" && (
+              <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => onCopy(msg.id, msg.content)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-white/30 hover:text-white/70 hover:bg-white/5 transition-colors"
+                >
+                  {copiedId === msg.id ? (
+                    <><Check className="h-3 w-3" /> Copiado</>
+                  ) : (
+                    <><Copy className="h-3 w-3" /> Copiar</>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
