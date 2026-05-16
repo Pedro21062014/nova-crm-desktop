@@ -277,13 +277,18 @@ export function SettingsPage() {
       return;
     }
     const newStatus = !form.isPublished;
-    setForm({ ...form, isPublished: newStatus });
+    setForm(prev => ({ ...prev, isPublished: newStatus }));
     setSaving(true);
     try {
-      await saveConfig({ ...form, isPublished: newStatus });
+      // Only save isPublished field — avoids sending the entire form (which may
+      // contain large base64 images in sections/logo that could exceed Firestore
+      // document size limits or cause silent write failures).
+      await saveConfig({ isPublished: newStatus });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
+      // Revert on error so the UI reflects the real state
+      setForm(prev => ({ ...prev, isPublished: !newStatus }));
       setLocalError(err.message || "Erro ao alterar status de publicacao.");
     } finally {
       setSaving(false);
@@ -509,7 +514,7 @@ export function SettingsPage() {
             }`}
           >
             <Globe2 className="h-4 w-4 inline mr-1.5" />
-            {form.isPublished ? "Publicada" : "Nao publicada"}
+            {saving ? "Aguarde..." : form.isPublished ? "Publicada (Ocultar)" : "Publicar Loja"}
           </button>
           {saved && (
             <motion.span

@@ -2,7 +2,7 @@
   "name": "nova-crm",
   "productName": "Nova CRM",
   "private": false,
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Nova CRM - Aplicativo Desktop",
   "author": "Nova CRM Team",
   "homepage": "https://novacrm.com.br",
@@ -64,7 +64,7 @@
     "win": {
       "target": [
         {
-          "target": "zip",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
@@ -76,13 +76,21 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
       "installerLanguages": [
         "pt_BR",
         "en_US"
       ],
       "language": 1046,
       "shortcutName": "Nova CRM",
-      "artifactName": "Nova-CRM-Setup-${version}.${ext}"
+      "artifactName": "Nova-CRM-Setup-${version}.${ext}",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "menuCategory": false,
+      "unicode": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "uninstallDisplayName": "Nova CRM ${version}"
     },
     "linux": {
       "target": [

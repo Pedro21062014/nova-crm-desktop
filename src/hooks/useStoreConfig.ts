@@ -50,7 +50,7 @@ function extractStoreConfig(merchantData: any): StoreConfig {
     enableNativePayment: sc.enableNativePayment,
     pixKey: sc.pixKey || "",
     document: sc.document || merchantData.cnpj || "",
-    isPublished: sc.isPublished,
+    isPublished: sc.isPublished ?? merchantData.isPublished,
     allowPickup: sc.allowPickup,
     isOnboarded: sc.isOnboarded,
     deliverySettings: sc.deliverySettings,
@@ -198,7 +198,9 @@ export function useStoreConfig() {
         if (data.enableNativePayment !== undefined) storeConfigUpdate.enableNativePayment = data.enableNativePayment;
         if (data.pixKey !== undefined) storeConfigUpdate.pixKey = data.pixKey;
         if (data.document !== undefined) storeConfigUpdate.document = data.document;
-        if (data.isPublished !== undefined) storeConfigUpdate.isPublished = data.isPublished;
+        if (data.isPublished !== undefined) {
+          storeConfigUpdate.isPublished = data.isPublished;
+        }
         if (data.allowPickup !== undefined) storeConfigUpdate.allowPickup = data.allowPickup;
         if (data.deliverySettings !== undefined) storeConfigUpdate.deliverySettings = data.deliverySettings;
         if (data.sections !== undefined) storeConfigUpdate.sections = data.sections;
@@ -220,6 +222,10 @@ export function useStoreConfig() {
         const dotNotationUpdate: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(storeConfigUpdate)) {
           dotNotationUpdate[`storeConfig.${key}`] = value;
+        }
+        // Also save isPublished at the top level for CRM compatibility
+        if (data.isPublished !== undefined) {
+          dotNotationUpdate.isPublished = data.isPublished;
         }
         dotNotationUpdate.updatedAt = Timestamp.now();
 
