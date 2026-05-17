@@ -1,6 +1,7 @@
 const { app, BrowserWindow, session, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const http = require("http");
 
 // Disable GPU acceleration for environments without display
 app.disableHardwareAcceleration();
@@ -36,6 +37,75 @@ loadAIConfig();
 
 let mainWindow;
 
+// ── Local HTTP Server for Production ──
+// Firebase Auth (Google Sign-in) requires an authorized domain (localhost).
+// Serving from file:// gives origin "null" which Firebase rejects.
+let serverPort = 0;
+
+function startLocalServer() {
+  const distPath = path.join(__dirname, "../dist");
+  
+  const MIME_TYPES = {
+    ".html": "text/html",
+    ".js": "application/javascript",
+    ".mjs": "application/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".eot": "application/vnd.ms-fontobject",
+    ".webp": "image/webp",
+    ".webm": "video/webm",
+    ".mp4": "video/mp4",
+    ".wasm": "application/wasm",
+  };
+
+  const server = http.createServer((req, res) => {
+    let urlPath = req.url.split("?")[0];
+    
+    // SPA fallback: serve index.html for non-file routes
+    if (!urlPath.includes(".")) {
+      urlPath = "/index.html";
+    }
+
+    const filePath = path.join(distPath, urlPath);
+    const ext = path.extname(filePath).toLowerCase();
+
+    // Security: prevent directory traversal
+    if (!filePath.startsWith(distPath)) {
+      res.writeHead(403);
+      res.end("Forbidden");
+      return;
+    }
+
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.writeHead(404);
+        res.end("Not Found");
+        return;
+      }
+      const contentType = MIME_TYPES[ext] || "application/octet-stream";
+      res.writeHead(200, { "Content-Type": contentType });
+      res.end(data);
+    });
+  });
+
+  // Listen on port 0 = OS picks a free port automatically
+  server.listen(0, "127.0.0.1", () => {
+    serverPort = server.address().port;
+    console.log(`[Server] Serving dist on http://localhost:${serverPort}`);
+  });
+
+  return server;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -64,9 +134,17 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:5173");
     mainWindow.webContents.openDevTools();
   } else {
-    // In production, load built files from dist/
-    // Use loadFile for file:// protocol (works with HashRouter)
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    // In production, serve from localhost so Firebase Auth (Google Sign-in) works.
+    // Firebase requires the origin to be an authorized domain, and "null" (from file://) is not one.
+    // Wait for the local server to be ready, then load from it.
+    const tryLoad = () => {
+      if (serverPort > 0) {
+        mainWindow.loadURL(`http://localhost:${serverPort}`);
+      } else {
+        setTimeout(tryLoad, 50);
+      }
+    };
+    tryLoad();
   }
 
   // Open DevTools on F12 (useful for debugging)
@@ -166,6 +244,11 @@ app.whenReady().then(() => {
   session.fromPartition("persist:whatsapp").webRequest.onBeforeSendHeaders((details, callback) => {
     callback({ requestHeaders: details.requestHeaders });
   });
+
+  // Start local server BEFORE creating window (production only)
+  if (app.isPackaged) {
+    startLocalServer();
+  }
 
   createWindow();
 
