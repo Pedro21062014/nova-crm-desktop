@@ -18,6 +18,8 @@ import {
 import logoSvg from "/logo.svg";
 import { useAuth } from "@/hooks/useAuth";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
+import { useNotifications } from "@/hooks/useNotifications";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -42,11 +44,25 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { config } = useStoreConfig();
+  const { lowStockCount, unreadMessageCount } = useNotifications();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   // Get the store logo URL from storeConfig (CRM format) or old format
   const storeLogoUrl = config?.logoUrl || config?.logo || "";
   const storeName = config?.storeName || config?.nomeLoja || config?.name || "";
+
+  // Get badge count for a nav item path
+  const getBadge = (path: string): number => {
+    if (path === "/produtos" && lowStockCount > 0) return lowStockCount;
+    if (path === "/chat" && unreadMessageCount > 0) return unreadMessageCount;
+    return 0;
+  };
+
+  const getBadgeColor = (path: string): string => {
+    if (path === "/produtos") return "bg-amber-500";
+    if (path === "/chat") return "bg-blue-500";
+    return "bg-danger";
+  };
 
   return (
     <motion.aside
@@ -55,7 +71,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className="flex h-full flex-col border-r border-border bg-sidebar"
     >
-      {/* Logo */}
+      {/* Logo + Notification Bell */}
       <div className="flex h-16 items-center justify-between px-4">
         <AnimatePresence mode="wait">
           {!collapsed && (
@@ -83,6 +99,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             className="h-8 w-8 mx-auto rounded-lg"
           />
         )}
+        {/* Notification bell - only show when not collapsed */}
+        {!collapsed && <NotificationBell />}
       </div>
 
       {/* Navigation */}
@@ -90,6 +108,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
+          const badge = getBadge(item.path);
+          const badgeColor = getBadgeColor(item.path);
 
           return (
             <motion.button
@@ -112,7 +132,22 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
                 />
               )}
-              <Icon className={cn("relative h-[18px] w-[18px] shrink-0", isActive && "text-white")} />
+              <div className="relative">
+                <Icon className={cn("relative h-[18px] w-[18px] shrink-0", isActive && "text-white")} />
+                {/* Badge on icon */}
+                {badge > 0 && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className={cn(
+                      "absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[16px] h-[16px] px-0.5 rounded-full text-white text-[9px] font-bold leading-none",
+                      badgeColor
+                    )}
+                  >
+                    {badge > 9 ? "9+" : badge}
+                  </motion.span>
+                )}
+              </div>
               <AnimatePresence>
                 {!collapsed && (
                   <motion.span
@@ -131,15 +166,27 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 <motion.div
                   initial={{ opacity: 0, x: -5 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="absolute left-full ml-2 rounded-lg bg-foreground text-background px-2.5 py-1 text-xs font-medium shadow-md z-50"
+                  className="absolute left-full ml-2 rounded-lg bg-foreground text-background px-2.5 py-1 text-xs font-medium shadow-md z-50 flex items-center gap-1.5"
                 >
                   {item.label}
+                  {badge > 0 && (
+                    <span className={cn("px-1 py-0.5 rounded text-[9px] font-bold text-white", badgeColor)}>
+                      {badge}
+                    </span>
+                  )}
                 </motion.div>
               )}
             </motion.button>
           );
         })}
       </nav>
+
+      {/* Collapsed notification bell at bottom */}
+      {collapsed && (
+        <div className="flex justify-center pb-2">
+          <NotificationBell />
+        </div>
+      )}
 
       {/* Footer */}
       <div className="border-t border-border p-3 space-y-2">
