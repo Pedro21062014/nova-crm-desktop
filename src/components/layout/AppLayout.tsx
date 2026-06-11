@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { OfflineBanner } from "./OfflineBanner";
+import { UpdateBanner } from "./UpdateBanner";
 
 export function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -17,6 +18,7 @@ export function AppLayout() {
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
       <OfflineBanner />
+      <UpdateBanner />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         <main className="flex-1 overflow-y-auto">

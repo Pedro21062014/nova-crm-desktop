@@ -26,4 +26,40 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.removeAllListeners("ai:chat:done");
     ipcRenderer.removeAllListeners("ai:chat:error");
   },
+
+  // ── Auto-Update ──
+  // Check for updates
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+
+  // Download the available update
+  downloadUpdate: () => ipcRenderer.invoke("update:download"),
+
+  // Install the downloaded update (quits and restarts)
+  installUpdate: () => ipcRenderer.invoke("update:install"),
+
+  // Get current update state
+  getUpdateState: () => ipcRenderer.invoke("update:get-state"),
+
+  // Get app version
+  getAppVersion: () => ipcRenderer.invoke("app:get-version"),
+
+  // Listen for update status changes
+  onUpdateStatus: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("update:status", handler);
+    return () => ipcRenderer.removeListener("update:status", handler);
+  },
+
+  // Listen for download progress
+  onUpdateProgress: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("update:progress", handler);
+    return () => ipcRenderer.removeListener("update:progress", handler);
+  },
+
+  // Remove all update listeners
+  removeAllUpdateListeners: () => {
+    ipcRenderer.removeAllListeners("update:status");
+    ipcRenderer.removeAllListeners("update:progress");
+  },
 });

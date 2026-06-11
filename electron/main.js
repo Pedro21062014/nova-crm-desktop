@@ -1,7 +1,8 @@
-const { app, BrowserWindow, session, ipcMain } = require("electron");
+const { app, BrowserWindow, session, ipcMain, Notification } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+const { autoUpdater } = require("electron-updater");
 
 // Disable GPU acceleration for environments without display
 app.disableHardwareAcceleration();
@@ -36,6 +37,110 @@ function loadAIConfig() {
 loadAIConfig();
 
 let mainWindow;
+
+// ── Auto-Updater Configuration ──
+autoUpdater.autoDownload = false; // We want to control download manually
+autoUpdater.autoInstallOnAppQuit = true; // Install on quit if downloaded
+autoUpdater.forceDevUpdateConfig = false; // Don't check for updates in dev
+
+// Track update state
+let updateInfo = null; // { version, releaseNotes, releaseName }
+let downloadProgress = null; // { bytesPerSecond, percent, transferred, total }
+let updateDownloaded = false;
+let updateError = null;
+
+function sendToRenderer(channel, data) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, data);
+  }
+}
+
+// ── Auto-Updater Events ──
+autoUpdater.on("checking-for-update", () => {
+  console.log("[Updater] Checking for updates...");
+  updateError = null;
+  sendToRenderer("update:status", { status: "checking" });
+});
+
+autoUpdater.on("update-available", (info) => {
+  console.log("[Updater] Update available:", info.version);
+  updateInfo = {
+    version: info.version,
+    releaseNotes: info.releaseNotes || "",
+    releaseName: info.releaseName || `v${info.version}`,
+  };
+  updateError = null;
+  sendToRenderer("update:status", {
+    status: "available",
+    info: updateInfo,
+  });
+
+  // Show native notification
+  if (Notification.isSupported()) {
+    const notif = new Notification({
+      title: "Nova CRM - Atualização disponível!",
+      body: `Versão ${info.version} está disponível. Clique para baixar.`,
+      icon: iconPath,
+      silent: false,
+    });
+    notif.on("click", () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+      }
+    });
+    notif.show();
+  }
+});
+
+autoUpdater.on("update-not-available", (info) => {
+  console.log("[Updater] No updates available. Current:", app.getVersion());
+  sendToRenderer("update:status", { status: "not-available", currentVersion: app.getVersion() });
+});
+
+autoUpdater.on("error", (err) => {
+  console.error("[Updater] Error:", err.message);
+  updateError = err.message;
+  sendToRenderer("update:status", { status: "error", error: err.message });
+});
+
+autoUpdater.on("download-progress", (progressInfo) => {
+  downloadProgress = {
+    bytesPerSecond: progressInfo.bytesPerSecond,
+    percent: Math.round(progressInfo.percent),
+    transferred: progressInfo.transferred,
+    total: progressInfo.total,
+  };
+  console.log(`[Updater] Download: ${downloadProgress.percent}%`);
+  sendToRenderer("update:progress", downloadProgress);
+});
+
+autoUpdater.on("update-downloaded", (info) => {
+  console.log("[Updater] Update downloaded:", info.version);
+  updateDownloaded = true;
+  sendToRenderer("update:status", {
+    status: "downloaded",
+    info: {
+      version: info.version,
+      releaseNotes: info.releaseNotes || "",
+      releaseName: info.releaseName || `v${info.version}`,
+    },
+  });
+
+  // Show native notification
+  if (Notification.isSupported()) {
+    const notif = new Notification({
+      title: "Nova CRM - Atualização pronta!",
+      body: `Versão ${info.version} baixada. Reinicie para instalar.`,
+      icon: iconPath,
+      silent: false,
+    });
+    notif.on("click", () => {
+      autoUpdater.quitAndInstall(false, true);
+    });
+    notif.show();
+  }
+});
 
 // ── Local HTTP Server for Production ──
 // Firebase Auth (Google Sign-in) requires an authorized domain (localhost).
@@ -231,6 +336,76 @@ ipcMain.handle("ai:chat", async (event, messages) => {
   }
 });
 
+// ── IPC: Auto-Update Handlers ──
+
+// Check for updates
+ipcMain.handle("update:check", async () => {
+  try {
+    if (!app.isPackaged) {
+      console.log("[Updater] Skipping check in development mode");
+      return { status: "dev", currentVersion: app.getVersion() };
+    }
+    const result = await autoUpdater.checkForUpdates();
+    return {
+      status: "check-initiated",
+      currentVersion: app.getVersion(),
+      latestVersion: result?.updateInfo?.version || null,
+    };
+  } catch (err) {
+    console.error("[Updater] Check error:", err);
+    return { status: "error", error: err.message };
+  }
+});
+
+// Download the available update
+ipcMain.handle("update:download", async () => {
+  try {
+    if (!updateInfo && !updateDownloaded) {
+      return { status: "error", error: "Nenhuma atualização disponível para download." };
+    }
+    if (updateDownloaded) {
+      return { status: "already-downloaded" };
+    }
+    await autoUpdater.downloadUpdate();
+    return { status: "downloading" };
+  } catch (err) {
+    console.error("[Updater] Download error:", err);
+    return { status: "error", error: err.message };
+  }
+});
+
+// Install the downloaded update (quits app and installs)
+ipcMain.handle("update:install", async () => {
+  try {
+    if (!updateDownloaded) {
+      return { status: "error", error: "Nenhuma atualização baixada para instalar." };
+    }
+    // quitAndInstall(isSilent, isForceRunAfter)
+    autoUpdater.quitAndInstall(false, true);
+    return { status: "installing" };
+  } catch (err) {
+    console.error("[Updater] Install error:", err);
+    return { status: "error", error: err.message };
+  }
+});
+
+// Get current update state
+ipcMain.handle("update:get-state", () => {
+  return {
+    currentVersion: app.getVersion(),
+    updateAvailable: !!updateInfo,
+    updateDownloaded,
+    updateInfo,
+    downloadProgress,
+    updateError,
+  };
+});
+
+// Get current app version
+ipcMain.handle("app:get-version", () => {
+  return app.getVersion();
+});
+
 // Fix Firebase Auth in Electron: allow Firebase Auth to work with file:// protocol
 // by granting storage access to the Firebase Auth domain
 app.whenReady().then(() => {
@@ -251,6 +426,26 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+
+  // ── Auto-Update: Check on startup ──
+  // Only check in production (packaged) mode
+  if (app.isPackaged) {
+    // Check for updates 5 seconds after launch (give the app time to load)
+    setTimeout(() => {
+      console.log("[Updater] Auto-checking for updates...");
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error("[Updater] Auto-check failed:", err.message);
+      });
+    }, 5000);
+
+    // Then check every 30 minutes
+    setInterval(() => {
+      console.log("[Updater] Periodic check for updates...");
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error("[Updater] Periodic check failed:", err.message);
+      });
+    }, 30 * 60 * 1000);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
