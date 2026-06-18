@@ -6,9 +6,11 @@ import {
   LayoutGrid, GripVertical, Eye, Globe2, Palette, Trash2, Copy, Type,
   ShoppingBag, Image, Sparkles, ChevronDown, ChevronUp, Plus, ExternalLink,
   Tag, FileText, PhoneCall, Upload,
+  RefreshCw, Download, Package, Monitor, Info,
 } from "lucide-react";
 import { Card, Button, Input, Skeleton } from "@/components/ui";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { type StoreConfig } from "@/services/firebase";
 
 // ── Helpers ──
@@ -41,7 +43,7 @@ function fileToBase64(file: File): Promise<string> {
 
 // ── Types ──
 
-type TabKey = "geral" | "horarios" | "pagamento" | "construtor";
+type TabKey = "geral" | "horarios" | "pagamento" | "construtor" | "sistema";
 
 interface StoreSection {
   id: string;
@@ -197,6 +199,7 @@ function SectionCard({
 
 export function SettingsPage() {
   const { config, loading, error, saveConfig, clearError } = useStoreConfig();
+  const update = useAutoUpdate();
   const [form, setForm] = useState<StoreConfig>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -458,6 +461,7 @@ export function SettingsPage() {
     { key: "horarios", label: "Horarios", icon: <Clock className="h-3.5 w-3.5" />, desc: "Funcionamento" },
     { key: "pagamento", label: "Pagamento", icon: <CreditCard className="h-3.5 w-3.5" />, desc: "PIX e recebimentos" },
     { key: "construtor", label: "Construtor", icon: <LayoutGrid className="h-3.5 w-3.5" />, desc: "Monte sua loja" },
+    { key: "sistema", label: "Sistema", icon: <Monitor className="h-3.5 w-3.5" />, desc: "Atualizacoes e versao" },
   ];
 
   const sectionTypeIcon = (type: StoreSection["type"]) => {
@@ -1493,6 +1497,201 @@ export function SettingsPage() {
                   </div>
                 </div>
               </Card>
+            </motion.div>
+          )}
+
+          {/* ──── SISTEMA TAB ──── */}
+          {activeTab === "sistema" && (
+            <motion.div key="sistema" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
+
+              {/* Atualizações do App */}
+              <SectionCard
+                title="Atualizações do Aplicativo"
+                icon={<RefreshCw className="h-5 w-5 text-accent" />}
+                defaultOpen={true}
+              >
+                <div className="space-y-4">
+
+                  {/* Status atual */}
+                  <div className="flex items-center gap-4 rounded-xl bg-muted p-4">
+                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${
+                      update.status === "available" || update.status === "downloaded"
+                        ? "bg-warning-light"
+                        : update.status === "error"
+                        ? "bg-danger-light"
+                        : "bg-success-light"
+                    }`}>
+                      <Package className={`h-6 w-6 ${
+                        update.status === "available" || update.status === "downloaded"
+                          ? "text-warning"
+                          : update.status === "error"
+                          ? "text-danger"
+                          : "text-success"
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground">Versão instalada</p>
+                      <p className="text-base font-semibold text-foreground">
+                        v{update.currentVersion || "—"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className={`text-sm font-semibold ${
+                        update.status === "available" ? "text-warning"
+                        : update.status === "downloaded" ? "text-success"
+                        : update.status === "downloading" ? "text-accent"
+                        : update.status === "error" ? "text-danger"
+                        : update.status === "checking" ? "text-accent"
+                        : update.status === "dev" ? "text-muted-foreground"
+                        : "text-muted-foreground"
+                      }`}>
+                        {update.status === "idle" && "Aguardando verificação"}
+                        {update.status === "checking" && "Verificando..."}
+                        {update.status === "available" && `v${update.updateInfo?.version} disponível`}
+                        {update.status === "not-available" && "Atualizado"}
+                        {update.status === "downloading" && "Baixando..."}
+                        {update.status === "downloaded" && "Pronto para instalar"}
+                        {update.status === "installing" && "Instalando..."}
+                        {update.status === "error" && "Erro"}
+                        {update.status === "dev" && "Modo desenvolvimento"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mensagem de erro */}
+                  {update.error && (
+                    <div className="flex items-start gap-2 rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Falha ao verificar atualizações</p>
+                        <p className="text-xs mt-0.5 opacity-90">{update.error}</p>
+                      </div>
+                    </div>
+                      )}
+
+                  {/* Release notes quando há atualização */}
+                  {update.updateInfo && (update.status === "available" || update.status === "downloaded") && (
+                    <div className="rounded-xl border border-warning/30 bg-warning-light/50 p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="h-4 w-4 text-warning" />
+                        <p className="text-sm font-semibold text-foreground">
+                          Novidades da v{update.updateInfo.version}
+                        </p>
+                      </div>
+                      <div className="text-sm text-muted-foreground max-h-32 overflow-y-auto whitespace-pre-wrap">
+                        {typeof update.updateInfo.releaseNotes === "string"
+                          ? update.updateInfo.releaseNotes
+                          : Array.isArray(update.updateInfo.releaseNotes)
+                          ? update.updateInfo.releaseNotes.map((n, i) => `• ${n.note || n.version}`).join("\n")
+                          : "Veja os detalhes no GitHub."}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Progresso de download */}
+                  {update.status === "downloading" && update.downloadProgress && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Baixando atualização...</span>
+                        <span>{update.downloadProgress.percent}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-accent transition-all"
+                          style={{ width: `${update.downloadProgress.percent}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {(update.downloadProgress.transferred / 1024 / 1024).toFixed(1)} MB / {(update.downloadProgress.total / 1024 / 1024).toFixed(1)} MB
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Ações */}
+                  <div className="flex flex-wrap gap-2">
+                    {/* Verificar atualizações */}
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      icon={update.status === "checking" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      onClick={update.checkForUpdates}
+                      disabled={update.status === "checking" || update.status === "downloading" || update.status === "installing" || !update.isElectron}
+                    >
+                      Verificar atualizações
+                    </Button>
+
+                    {/* Baixar */}
+                    {update.status === "available" && (
+                      <Button
+                        variant="primary"
+                        size="md"
+                        icon={<Download className="h-4 w-4" />}
+                        onClick={update.downloadUpdate}
+                      >
+                        Baixar atualização
+                      </Button>
+                    )}
+
+                    {/* Instalar */}
+                    {update.status === "downloaded" && (
+                      <Button
+                        variant="primary"
+                        size="md"
+                        icon={<Package className="h-4 w-4" />}
+                        onClick={update.installUpdate}
+                      >
+                        Instalar e reiniciar
+                      </Button>
+                    )}
+                  </div>
+
+                  {!update.isElectron && (
+                    <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      As atualizações automáticas funcionam apenas na versão instalada do app (não em desenvolvimento).
+                    </p>
+                  )}
+                </div>
+              </SectionCard>
+
+              {/* Informações do Sistema */}
+              <SectionCard
+                title="Informações do Sistema"
+                icon={<Monitor className="h-5 w-5 text-muted-foreground" />}
+                defaultOpen={false}
+              >
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl bg-muted p-3">
+                      <p className="text-xs text-muted-foreground">Aplicativo</p>
+                      <p className="font-medium text-foreground">Nova CRM Desktop</p>
+                    </div>
+                    <div className="rounded-xl bg-muted p-3">
+                      <p className="text-xs text-muted-foreground">Versão</p>
+                      <p className="font-medium text-foreground">v{update.currentVersion || "—"}</p>
+                    </div>
+                    <div className="rounded-xl bg-muted p-3">
+                      <p className="text-xs text-muted-foreground">Plataforma</p>
+                      <p className="font-medium text-foreground capitalize">
+                        {update.isElectron ? (window.electronAPI?.platform || "—") : "Navegador"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-muted p-3">
+                      <p className="text-xs text-muted-foreground">Repositório</p>
+                      <a
+                        href="https://github.com/Pedro21062014/nova-crm-desktop/releases"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-accent hover:underline inline-flex items-center gap-1"
+                      >
+                        Ver releases <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
             </motion.div>
           )}
         </AnimatePresence>

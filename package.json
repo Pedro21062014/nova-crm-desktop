@@ -2,7 +2,7 @@
   "name": "nova-crm",
   "productName": "Nova CRM",
   "private": false,
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "Nova CRM - Aplicativo Desktop",
   "author": "Nova CRM Team",
   "homepage": "https://novacrm.com.br",
@@ -30,7 +30,8 @@
     "react-router-dom": "^7.15.0",
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.6.0",
-    "whatsapp-web.js": "^1.34.7"
+    "whatsapp-web.js": "^1.34.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
