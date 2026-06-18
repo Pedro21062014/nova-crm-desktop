@@ -57,11 +57,24 @@ function initClient(mainWindow) {
     },
     // Use the Chromium that comes with Electron
     // This avoids downloading a separate Chrome instance
+    // Override the WhatsApp Web version — pinning avoids breakage when
+    // WhatsApp rolls out a new web build that whatsapp-web.js hasn't
+    // shipped support for yet. If empty, uses the library default.
+    webVersionCache: {
+      type: "remote",
+      remotePath:
+        "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
+    },
+  });
+
+  // ── Loading screen event (debug visibility) ──
+  client.on("loading_screen", (percent, message) => {
+    console.log("[WhatsApp] Loading:", percent, message);
   });
 
   // ── QR Code Event ──
   client.on("qr", (qr) => {
-    console.log("[WhatsApp] QR Code received");
+    console.log("[WhatsApp] QR Code received, length:", qr?.length || 0);
     qrCodeData = qr;
     connectionStatus = "qr";
     sendToRenderer(mainWindow, "whatsapp:qr", { qr });

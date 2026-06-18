@@ -26,112 +26,87 @@ import {
   Users,
   User,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useScheduledMessages } from "@/hooks/useFirebaseData";
 import { type ScheduledMessage } from "@/services/firebase";
 import { formatDate, cn } from "@/lib/utils";
 
-// ── QR Code SVG Generator ──
-// Simple QR code renderer using a canvas-based approach
+// ── QR Code Display ──
+// Renders a real scannable QR code from the raw string payload using the
+// `qrcode` library (canvas toDataURL). This replaces the previous fake
+// generator that drew a deterministic pattern which phones could not scan.
 
 function QRCodeDisplay({ data }: { data: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!canvasRef.current || !data) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Generate QR code using a simple matrix approach
-    // We'll use the raw QR data string to render a grid
-    const size = 256;
-    canvas.width = size;
-    canvas.height = size;
-
-    // Import QR code library dynamically or use a simple approach
-    // For now, use the built-in approach with a temporary Image
-    const img = new Image();
-    img.onload = () => {
-      ctx.clearRect(0, 0, size, size);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, size, size);
-      ctx.drawImage(img, 0, 0, size, size);
+    let cancelled = false;
+    if (!data) {
+      setDataUrl(null);
+      setError(null);
+      return;
+    }
+    // Generate a high-error-correction QR so it stays scannable even if the
+    // logo overlay in the center covers a small portion of the matrix.
+    QRCode.toDataURL(data, {
+      errorCorrectionLevel: "H",
+      margin: 2,
+      width: 320,
+      color: {
+        dark: "#000000",
+        light: "#ffffff",
+      },
+    })
+      .then((url) => {
+        if (!cancelled) {
+          setDataUrl(url);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("[QRCode] Error generating:", err);
+          setError("Erro ao gerar QR code.");
+        }
+      });
+    return () => {
+      cancelled = true;
     };
-
-    // Use Google Charts API for QR code rendering (works offline with cached data)
-    // Actually, let's generate it ourselves using a simple algorithm
-    generateQRCode(ctx, data, size);
   }, [data]);
 
+  if (error) {
+    return (
+      <div className="rounded-xl border-2 border-danger/30 bg-danger-light p-4 text-sm text-danger text-center" style={{ width: 256, height: 256 }}>
+        {error}
+      </div>
+    );
+  }
+
+  if (!dataUrl) {
+    return (
+      <div className="rounded-xl border-2 border-green-200 bg-muted animate-pulse" style={{ width: 256, height: 256 }} />
+    );
+  }
+
   return (
-    <canvas
-      ref={canvasRef}
-      className="rounded-xl border-2 border-green-200 shadow-sm"
-      style={{ width: 256, height: 256 }}
-    />
+    <div className="relative" style={{ width: 256, height: 256 }}>
+      <img
+        src={dataUrl}
+        alt="QR Code WhatsApp"
+        className="rounded-xl border-2 border-green-200 shadow-sm bg-white"
+        style={{ width: 256, height: 256 }}
+      />
+      {/* Logo overlay in the center — improves UX without breaking scan
+          because we use errorCorrectionLevel: "H" (30% recovery). */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="bg-white rounded-xl p-2 shadow-md">
+          <MessageCircle className="h-8 w-8 text-green-600" />
+        </div>
+      </div>
+    </div>
   );
-}
-
-// Simple QR code matrix generator
-function generateQRCode(ctx: CanvasRenderingContext2D, text: string, size: number) {
-  // We'll create a simple visual representation
-  // Using the text data to create a deterministic pattern
-  const moduleCount = 33;
-  const moduleSize = size / moduleCount;
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, size, size);
-
-  // Create a deterministic pattern from the QR data
-  const dataBytes = [];
-  for (let i = 0; i < text.length; i++) {
-    dataBytes.push(text.charCodeAt(i));
-  }
-
-  // Draw finder patterns (3 corners)
-  function drawFinderPattern(x: number, y: number) {
-    // Outer border
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(x * moduleSize, y * moduleSize, 7 * moduleSize, 7 * moduleSize);
-    // Inner white
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect((x + 1) * moduleSize, (y + 1) * moduleSize, 5 * moduleSize, 5 * moduleSize);
-    // Center block
-    ctx.fillStyle = "#000000";
-    ctx.fillRect((x + 2) * moduleSize, (y + 2) * moduleSize, 3 * moduleSize, 3 * moduleSize);
-  }
-
-  drawFinderPattern(0, 0);
-  drawFinderPattern(moduleCount - 7, 0);
-  drawFinderPattern(0, moduleCount - 7);
-
-  // Fill data modules with deterministic pattern from text
-  ctx.fillStyle = "#000000";
-  for (let row = 0; row < moduleCount; row++) {
-    for (let col = 0; col < moduleCount; col++) {
-      // Skip finder pattern areas
-      if ((row < 8 && col < 8) || (row < 8 && col >= moduleCount - 8) || (row >= moduleCount - 8 && col < 8)) {
-        continue;
-      }
-
-      // Skip timing patterns
-      if (row === 6 || col === 6) {
-        if ((row + col) % 2 === 0) {
-          ctx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
-        }
-        continue;
-      }
-
-      // Data module - use text hash to determine if dark
-      const idx = (row * moduleCount + col) % dataBytes.length;
-      const byteVal = dataBytes[idx];
-      if (byteVal % 2 === 1 || (byteVal > 64 && row % 3 === 0) || (byteVal > 128 && col % 4 === 0)) {
-        ctx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
-      }
-    }
-  }
 }
 
 // ── Animation Variants ──

@@ -69,8 +69,24 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       initial={false}
       animate={{ width: collapsed ? 72 : 240 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-      className="flex h-full flex-col border-r border-border bg-sidebar"
+      className="flex h-full flex-col border-r border-border bg-sidebar relative"
     >
+      {/* Hover hint indicator — appears at the right edge when collapsed,
+          gives the user a visual cue that hovering expands the sidebar. */}
+      {collapsed && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pointer-events-none z-50"
+        >
+          <div className="flex items-center gap-1 px-2 py-1.5 rounded-r-lg bg-border/60 text-muted-foreground text-[10px] font-medium shadow-sm">
+            <ChevronLeft className="h-3 w-3 rotate-180" />
+            <span className="whitespace-nowrap">Hover</span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Logo + Notification Bell */}
       <div className="flex h-16 items-center justify-between px-4">
         <AnimatePresence mode="wait">
