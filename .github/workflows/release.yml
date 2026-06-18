@@ -1,0 +1,162 @@
+name: Build & Release Desktop App
+
+# Workflow disparado manualmente via Actions tab -> "Run workflow".
+# Passa uma versão (ex: v2.6.0) e o pipeline:
+#   1. Builda em paralelo Windows (.exe NSIS), Linux (.deb) e macOS (.dmg x64 + arm64)
+#   2. Coleta todos os instaladores como artifacts
+#   3. Cria um Release no GitHub com os 3 instaladores anexados
+#
+# Requisitos:
+#   - permissions: contents: write (já habilitado abaixo)
+#   - O token default GITHUB_TOKEN é suficiente (não precisa de PAT)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão/tag do release (ex: v2.6.0)'
+        required: true
+        default: 'v2.6.0'
+      prerelease:
+        description: 'Marcar como pré-release?'
+        required: false
+        type: boolean
+        default: false
+      make_latest:
+        description: 'Marcar como latest release?'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            label: Windows
+          - os: ubuntu-latest
+            platform: linux
+            label: Linux
+          - os: macos-latest
+            platform: mac
+            label: macOS
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & package (${{ matrix.platform }})
+        run: npm run electron:build:${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Linux: o electron-builder precisa de Docker/snap apenas para snap, não para deb
+          # Mac: desabilita code signing automático (sem Apple Developer ID)
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Desabilita notarização (sem Apple ID)
+          APPLE_ID: ""
+          APPLE_APP_SPECIFIC_PASSWORD: ""
+          APPLE_TEAM_ID: ""
+
+      - name: Verify artifacts
+        shell: bash
+        run: |
+          echo "=== Artifacts in release/ ==="
+          ls -la release/ || true
+          echo ""
+          echo "=== Filtered installers ==="
+          ls -la release/*.exe release/*.deb release/*.dmg release/latest*.yml 2>/dev/null || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}
+          path: |
+            release/*.exe
+            release/*.deb
+            release/*.dmg
+            release/latest*.yml
+            release/*.blockmap
+          if-no-files-found: warn
+          retention-days: 7
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          ls -la artifacts/
+          echo ""
+          echo "=== Sizes ==="
+          du -h artifacts/* 2>/dev/null || true
+
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            NOTES="Release ${{ inputs.version }} — first automated build pipeline."
+          else
+            NOTES=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD 2>/dev/null | head -50)
+          fi
+          # Write to file to preserve newlines
+          printf '%s\n\n---\n\nBuilt with GitHub Actions on Windows/Linux/macOS runners.\n' "$NOTES" > RELEASE_NOTES.md
+          echo "=== Release notes ==="
+          cat RELEASE_NOTES.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: Nova CRM ${{ inputs.version }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            artifacts/*.exe
+            artifacts/*.deb
+            artifacts/*.dmg
+            artifacts/latest*.yml
+            artifacts/*.blockmap
+          prerelease: ${{ inputs.prerelease }}
+          make_latest: ${{ inputs.make_latest }}
+          fail_on_unmatched_files: true
+          token: ${{ secrets.GITHUB_TOKEN }}

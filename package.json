@@ -2,7 +2,7 @@
   "name": "nova-crm",
   "productName": "Nova CRM",
   "private": false,
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Nova CRM - Aplicativo Desktop",
   "author": "Nova CRM Team",
   "homepage": "https://novacrm.com.br",
@@ -14,6 +14,7 @@
     "electron:build": "tsc -b && vite build && electron-builder",
     "electron:build:win": "tsc -b && vite build && electron-builder --win",
     "electron:build:linux": "tsc -b && vite build && electron-builder --linux",
+    "electron:build:mac": "tsc -b && vite build && electron-builder --mac",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -124,6 +125,41 @@
         "xdg-utils"
       ],
       "artifactName": "nova-crm_${version}_amd64.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.business",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "identity": null,
+      "extendInfo": {
+        "NSDownloadsFolderUsageDescription": "This app needs access to Downloads to save files."
+      }
+    },
+    "dmg": {
+      "artifactName": "Nova-CRM-${version}-${arch}.${ext}",
+      "title": "Nova CRM ${version}",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     }
   }
 }
