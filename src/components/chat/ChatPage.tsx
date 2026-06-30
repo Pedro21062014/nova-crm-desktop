@@ -10,8 +10,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Trash2,
-  ArrowLeft,
-  Store,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useChats, useChatMessages, getMsgTime, isMerchantMessage } from "@/hooks/useChat";
@@ -50,7 +48,7 @@ function cPhone(c: any): string { return safeStr(c.telefone || c.phone); }
  * CRM stores `customerName`, some may have different field names.
  */
 function getConvName(conv: ChatConversation): string {
-  return conv.customerName || "Loja";
+  return conv.customerName || "Cliente";
 }
 
 /**
@@ -97,10 +95,6 @@ export function ChatPage() {
     markRead(chatId);
   }, [markRead]);
 
-  const handleBackToList = useCallback(() => {
-    setSelectedChatId(null);
-  }, []);
-
   const handleCreateChat = async () => {
     setSaving(true);
     setActionError(null);
@@ -138,182 +132,121 @@ export function ChatPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className="flex h-full w-full relative overflow-hidden"
+      className="flex h-full"
     >
-      <AnimatePresence mode="wait">
-        {selectedChatId ? (
-          <motion.div
-            key="conversation"
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 40 }}
-            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            className="flex flex-col h-full w-full absolute inset-0 bg-background"
-          >
-            <ChatView
-              chatId={selectedChatId}
-              conversations={conversations}
-              onBack={handleBackToList}
-            />
-          </motion.div>
-        ) : (
-          <motion.div
-            key="list"
-            initial={{ opacity: 0, x: -40 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -40 }}
-            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            className="flex flex-col h-full w-full"
-          >
-            {/* Header */}
-            <div className="px-6 pt-6 pb-4 space-y-4 border-b border-border shrink-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-                    <MessageSquare className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h1 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                      Chats com Lojas
-                      {totalUnread > 0 && (
-                        <span className="inline-flex items-center justify-center rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-white">
-                          {totalUnread}
-                        </span>
-                      )}
-                    </h1>
-                    <p className="text-xs text-muted-foreground">
-                      {conversations.length} {conversations.length === 1 ? "conversa" : "conversas"} recentes
-                    </p>
-                  </div>
-                </div>
-                <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setModalOpen(true)}>
-                  Nova
-                </Button>
-              </div>
+      {/* Left Panel - Conversation List */}
+      <div className="w-80 border-r border-border flex flex-col shrink-0">
+        <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              Chat
+              {totalUnread > 0 && (
+                <span className="inline-flex items-center justify-center rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-white">
+                  {totalUnread}
+                </span>
+              )}
+            </h1>
+            <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setModalOpen(true)}>
+              Novo
+            </Button>
+          </div>
+          <Input
+            placeholder="Buscar conversa..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            icon={<Search className="h-4 w-4" />}
+          />
+        </div>
 
-              <Input
-                placeholder="Buscar conversa por nome ou telefone..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                icon={<Search className="h-4 w-4" />}
-              />
+        <div className="flex-1 overflow-y-auto px-2 pb-4">
+          {loading ? (
+            <div className="space-y-2 p-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-xl" />
+              ))}
             </div>
-
-            {/* Lista de conversas em tela cheia */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {Array.from({ length: 9 }).map((_, i) => (
-                    <Skeleton key={i} className="h-24 w-full rounded-2xl" />
-                  ))}
-                </div>
-              ) : sorted.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 text-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-muted">
-                    <MessageSquare className="h-7 w-7 text-muted-foreground/50" />
-                  </div>
-                  <p className="mt-4 text-base font-medium text-foreground">
-                    {search ? "Nenhuma conversa encontrada" : "Nenhuma conversa ainda"}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-                    {search
-                      ? "Tente buscar por outro nome ou telefone"
-                      : "Inicie uma nova conversa com uma loja para começar a trocar mensagens"}
-                  </p>
-                  {!search && (
-                    <Button
-                      size="sm"
-                      className="mt-4"
-                      icon={<Plus className="h-3.5 w-3.5" />}
-                      onClick={() => setModalOpen(true)}
-                    >
-                      Nova conversa
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <motion.div
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="show"
-                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
-                >
-                  {sorted.map((conv) => {
-                    const name = getConvName(conv);
-                    const time = getConvTime(conv);
-                    const hasUnread = (conv.unreadCount || 0) > 0;
-                    return (
-                      <motion.button
-                        key={conv.id}
-                        variants={itemVariants}
-                        onClick={() => handleSelectChat(conv.id!)}
+          ) : sorted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <MessageSquare className="h-10 w-10 text-muted-foreground/30" />
+              <p className="mt-3 text-sm text-muted-foreground">
+                Nenhuma conversa encontrada
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {sorted.map((conv) => {
+                const name = getConvName(conv);
+                return (
+                  <button
+                    key={conv.id}
+                    onClick={() => handleSelectChat(conv.id!)}
+                    className={cn(
+                      "w-full text-left rounded-xl p-3 transition-all duration-200 group",
+                      selectedChatId === conv.id
+                        ? "bg-accent-light border border-accent/20"
+                        : "hover:bg-muted"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
                         className={cn(
-                          "group relative text-left rounded-2xl p-4 transition-all duration-200 border",
-                          hasUnread
-                            ? "bg-accent-light/60 border-accent/30 hover:border-accent/50 hover:shadow-md"
-                            : "bg-card border-border hover:border-accent/30 hover:shadow-md hover:-translate-y-0.5"
+                          "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium",
+                          selectedChatId === conv.id
+                            ? "bg-accent text-white"
+                            : "bg-muted text-muted-foreground"
                         )}
                       >
-                        <div className="flex items-start gap-3">
-                          <div
-                            className={cn(
-                              "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-base font-semibold",
-                              hasUnread
-                                ? "bg-accent text-white"
-                                : "bg-muted text-muted-foreground"
-                            )}
-                          >
-                            {name.charAt(0)?.toUpperCase() || "?"}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-foreground truncate flex items-center gap-1.5">
-                                <Store className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                {name}
-                              </p>
-                              {hasUnread && (
-                                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-accent text-white text-[10px] font-bold shrink-0">
-                                  {conv.unreadCount}
-                                </span>
-                              )}
-                            </div>
-                            <p className={cn(
-                              "text-xs mt-0.5 truncate",
-                              hasUnread ? "text-foreground/80 font-medium" : "text-muted-foreground"
-                            )}>
-                              {conv.lastMessage || "Sem mensagens ainda"}
-                            </p>
-                            <div className="flex items-center justify-between mt-2">
-                              {conv.customerPhone ? (
-                                <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
-                                  <Phone className="h-3 w-3" />
-                                  {conv.customerPhone}
-                                </p>
-                              ) : <span />}
-                              {time > 0 && (
-                                <p className="text-[11px] text-muted-foreground/60">
-                                  {formatDate(time)}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            onClick={(e) => handleDeleteChat(conv.id!, e)}
-                            className="p-1.5 text-muted-foreground/40 hover:text-danger rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            title="Excluir conversa"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                        {name.charAt(0)?.toUpperCase() || "?"}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {name}
+                          </p>
+                          {conv.unreadCount && conv.unreadCount > 0 ? (
+                            <span className="inline-flex items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              {conv.unreadCount}
+                            </span>
+                          ) : null}
                         </div>
-                      </motion.button>
-                    );
-                  })}
-                </motion.div>
-              )}
+                        <p className="text-xs text-muted-foreground truncate">
+                          {conv.lastMessage || "Sem mensagens"}
+                        </p>
+                        {getConvTime(conv) > 0 && (
+                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                            {formatDate(getConvTime(conv))}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteChat(conv.id!, e)}
+                        className="p-1.5 text-muted-foreground/40 hover:text-danger rounded-full opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        title="Excluir conversa"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-          </motion.div>
+          )}
+        </div>
+      </div>
+
+      {/* Right Panel - Chat Messages */}
+      <div className="flex-1 flex flex-col">
+        {selectedChatId ? (
+          <ChatView chatId={selectedChatId} conversations={conversations} />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <MessageSquare className="h-14 w-14 text-muted-foreground/20" />
+            <p className="mt-4 text-sm text-muted-foreground">
+              Selecione uma conversa para começar
+            </p>
+          </div>
         )}
-      </AnimatePresence>
+      </div>
 
       {/* New Chat Modal */}
       <Modal
@@ -386,17 +319,9 @@ export function ChatPage() {
   );
 }
 
-// ── Chat View (tela cheia de conversa) ──
+// ── Chat View (messages area) ──
 
-function ChatView({
-  chatId,
-  conversations,
-  onBack,
-}: {
-  chatId: string;
-  conversations: ChatConversation[];
-  onBack: () => void;
-}) {
+function ChatView({ chatId, conversations }: { chatId: string; conversations: ChatConversation[] }) {
   const { messages, loading, sendMessage } = useChatMessages(chatId);
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
@@ -439,25 +364,13 @@ function ChatView({
 
   return (
     <>
-      {/* Chat Header — em tela cheia, com botão voltar */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0 bg-background">
-        <button
-          onClick={onBack}
-          className="flex items-center justify-center h-10 w-10 rounded-xl hover:bg-muted text-foreground transition-colors shrink-0"
-          title="Voltar para lista de conversas"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-white text-base font-semibold shrink-0">
+      {/* Chat Header */}
+      <div className="flex items-center gap-3 px-6 py-3 border-b border-border shrink-0">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white text-sm font-medium">
           {chatName.charAt(0)?.toUpperCase()}
         </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-base font-semibold text-foreground truncate flex items-center gap-1.5">
-            <Store className="h-4 w-4 text-muted-foreground shrink-0" />
-            {chatName}
-          </p>
+        <div>
+          <p className="text-sm font-semibold text-foreground">{chatName}</p>
           {chatPhone && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Phone className="h-3 w-3" />
@@ -467,69 +380,67 @@ function ChatView({
         </div>
       </div>
 
-      {/* Messages Area — ocupa toda tela disponível */}
+      {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
         {loading ? (
-          <div className="space-y-3 max-w-2xl mx-auto">
-            {Array.from({ length: 6 }).map((_, i) => (
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className={cn("h-12 w-64 rounded-xl", i % 2 === 0 ? "ml-auto" : "")} />
             ))}
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-              <MessageSquare className="h-6 w-6 text-muted-foreground/40" />
-            </div>
-            <p className="mt-4 text-sm font-medium text-foreground">Envie a primeira mensagem</p>
-            <p className="mt-1 text-xs text-muted-foreground">Inicie a conversa com esta loja</p>
+            <MessageSquare className="h-10 w-10 text-muted-foreground/20" />
+            <p className="mt-3 text-sm text-muted-foreground">
+              Envie a primeira mensagem
+            </p>
           </div>
         ) : (
-          <div className="max-w-2xl mx-auto">
-            {messages.map((msg) => {
-              const isMerchant = isMerchantMessage(msg);
-              const senderDisplay = isMerchant ? "Você" : (chatName || "Loja");
-              return (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className={cn("flex", isMerchant ? "justify-end" : "justify-start")}
+          messages.map((msg) => {
+            const isMerchant = isMerchantMessage(msg);
+            // For customer messages, show the customer name from the conversation
+            const senderDisplay = isMerchant ? "Você" : (chatName || "Cliente");
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className={cn("flex", isMerchant ? "justify-end" : "justify-start")}
+              >
+                <div
+                  className={cn(
+                    "max-w-[70%] rounded-2xl px-4 py-2.5",
+                    isMerchant
+                      ? "bg-accent text-white rounded-br-md"
+                      : "bg-muted text-foreground rounded-bl-md"
+                  )}
                 >
-                  <div
-                    className={cn(
-                      "max-w-[75%] rounded-2xl px-4 py-2.5",
-                      isMerchant
-                        ? "bg-accent text-white rounded-br-md"
-                        : "bg-muted text-foreground rounded-bl-md"
+                  {!isMerchant && (
+                    <p className="text-xs font-medium mb-0.5 text-muted-foreground">
+                      {senderDisplay}
+                    </p>
+                  )}
+                  <p className="text-sm leading-relaxed">{msg.text}</p>
+                  <div className={cn("flex items-center gap-1 mt-1", isMerchant ? "justify-end" : "")}>
+                    <span className={cn("text-[10px]", isMerchant ? "text-white/60" : "text-muted-foreground/60")}>
+                      {formatMsgTime(msg)}
+                    </span>
+                    {isMerchant && msg.read && (
+                      <CheckCircle2 className="h-3 w-3 text-white/60" />
                     )}
-                  >
-                    {!isMerchant && (
-                      <p className="text-xs font-medium mb-0.5 text-muted-foreground">
-                        {senderDisplay}
-                      </p>
-                    )}
-                    <p className="text-sm leading-relaxed">{msg.text}</p>
-                    <div className={cn("flex items-center gap-1 mt-1", isMerchant ? "justify-end" : "")}>
-                      <span className={cn("text-[10px]", isMerchant ? "text-white/60" : "text-muted-foreground/60")}>
-                        {formatMsgTime(msg)}
-                      </span>
-                      {isMerchant && msg.read && (
-                        <CheckCircle2 className="h-3 w-3 text-white/60" />
-                      )}
-                    </div>
                   </div>
-                </motion.div>
-              );
-            })}
-          </div>
+                </div>
+              </motion.div>
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area — fixa no fundo, em tela cheia */}
-      <div className="px-6 py-3 border-t border-border shrink-0 bg-background">
-        <div className="flex items-center gap-2 max-w-2xl mx-auto">
+      {/* Input Area */}
+      <div className="px-4 py-3 border-t border-border shrink-0">
+        <div className="flex items-center gap-2">
           <input
             ref={inputRef}
             type="text"
@@ -537,7 +448,7 @@ function ChatView({
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Digite uma mensagem..."
-            className="flex-1 h-11 rounded-xl border border-border bg-background px-4 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
+            className="flex-1 h-10 rounded-xl border border-border bg-background px-4 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
           />
           <Button
             onClick={handleSend}
