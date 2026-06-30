@@ -13,7 +13,7 @@ import {
   MessageCircle,
   MessageSquare,
   Store,
-  Sparkles,
+
 } from "lucide-react";
 import logoSvg from "/logo.svg";
 import { useAuth } from "@/hooks/useAuth";
@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Sparkles, label: "Nova IA", path: "/ia" },
+
   { icon: Package, label: "Produtos", path: "/produtos" },
   { icon: Users, label: "Clientes", path: "/clientes" },
   { icon: ShoppingCart, label: "Pedidos", path: "/pedidos" },
