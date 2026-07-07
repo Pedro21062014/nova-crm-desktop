@@ -1,0 +1,65 @@
+name: CI
+
+# Validação contínua em cada push / PR.
+# 1. Instala dependências
+# 2. Roda lint
+# 3. Compila TypeScript + build do Vite
+# Mantém o código sempre verde antes do release manual.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint & Build (Linux)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Linux build deps (Electron native modules)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 \
+            xdg-utils libgbm1 libasound2 libsecret-1-0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Type-check & build (Vite)
+        run: npm run build
+        env:
+          # Evita travar o Electron builder no CI quando só queremos validar o Vite build
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload Vite build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vite-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 3

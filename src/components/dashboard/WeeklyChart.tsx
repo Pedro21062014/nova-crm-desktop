@@ -109,7 +109,7 @@ export function WeeklyChart({ orders, dateRange }: WeeklyChartProps) {
           maxBarSize={32}
         />
         <Bar
-          dataKey="Pago (Pix/Cartao)"
+          dataKey="Pago (Pix/Cartão)"
           fill="var(--color-border)"
           radius={[6, 6, 0, 0]}
           maxBarSize={32}
@@ -135,7 +135,7 @@ function buildChartData(
 }
 
 function buildDailyData(orders: Order[], start: Date, end: Date) {
-  const days = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+  const days = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   const result = [];
 
@@ -165,7 +165,7 @@ function buildDailyData(orders: Order[], start: Date, end: Date) {
     result.push({
       name,
       Faturamento: faturamento,
-      "Pago (Pix/Cartao)": valorPago,
+      "Pago (Pix/Cartão)": valorPago,
     });
   }
 
@@ -205,7 +205,7 @@ function buildWeeklyData(orders: Order[], start: Date, end: Date) {
     result.push({
       name: `${fmt(currentStart)}-${fmt(actualEnd)}`,
       Faturamento: faturamento,
-      "Pago (Pix/Cartao)": valorPago,
+      "Pago (Pix/Cartão)": valorPago,
     });
 
     // Move to next week
@@ -250,7 +250,7 @@ function buildMonthlyData(orders: Order[], start: Date, end: Date) {
     result.push({
       name: `${months[currentMonth.getMonth()]}/${String(currentMonth.getFullYear()).slice(2)}`,
       Faturamento: faturamento,
-      "Pago (Pix/Cartao)": valorPago,
+      "Pago (Pix/Cartão)": valorPago,
     });
 
     // Move to next month

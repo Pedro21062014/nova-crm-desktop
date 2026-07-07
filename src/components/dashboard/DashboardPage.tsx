@@ -66,7 +66,7 @@ interface DateRange {
 
 const presetOptions: { key: PresetRange; label: string; days: number }[] = [
   { key: "7d", label: "7 dias", days: 7 },
-  { key: "30d", label: "1 mes", days: 30 },
+  { key: "30d", label: "1 mês", days: 30 },
   { key: "60d", label: "2 meses", days: 60 },
   { key: "custom", label: "Personalizado", days: 0 },
 ];
@@ -212,7 +212,7 @@ export function DashboardPage() {
   const storeName = storeConfig?.storeName || storeConfig?.nomeLoja || storeConfig?.name || "Nova CRM";
 
   const formatChange = (change: number) => {
-    if (change === 0) return { text: "Sem alteracao", positive: true };
+    if (change === 0) return { text: "Sem alteração", positive: true };
     const sign = change > 0 ? "+" : "";
     return { text: `${sign}${change.toFixed(1)}%`, positive: change >= 0 };
   };
@@ -230,7 +230,7 @@ export function DashboardPage() {
       change: revenueChange,
     },
     {
-      label: "Valor Pago (Pix/Cartao)",
+      label: "Valor Pago (Pix/Cartão)",
       value: formatCurrency(totalPaid),
       icon: CreditCard,
       color: "text-blue-500",
@@ -274,7 +274,7 @@ export function DashboardPage() {
             Dashboard
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Visao geral de {storeName}
+            Visão geral de {storeName}
           </p>
         </div>
 
@@ -326,7 +326,7 @@ export function DashboardPage() {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-accent" />
-                  <span className="text-sm font-medium text-foreground">Periodo:</span>
+                  <span className="text-sm font-medium text-foreground">Período:</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -335,7 +335,7 @@ export function DashboardPage() {
                     onChange={e => setCustomStart(e.target.value)}
                     className="h-9 px-3 border border-border rounded-lg bg-background text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
                   />
-                  <span className="text-muted-foreground text-sm">ate</span>
+                  <span className="text-muted-foreground text-sm">até</span>
                   <input
                     type="date"
                     value={customEnd}
@@ -396,7 +396,7 @@ export function DashboardPage() {
                         ) : (
                           <TrendingUp className="h-3 w-3 rotate-180" />
                         )}
-                        {stat.change.text} vs periodo anterior
+                        {stat.change.text} vs período anterior
                       </div>
                     )}
                   </div>
@@ -419,7 +419,7 @@ export function DashboardPage() {
                 Desempenho
               </h2>
               <p className="text-sm text-muted-foreground">
-                Receita do periodo selecionado ({dateRange.label})
+                Receita do período selecionado ({dateRange.label})
               </p>
             </div>
             {isLoading ? (
@@ -437,7 +437,7 @@ export function DashboardPage() {
                 Pedidos Recentes
               </h2>
               <p className="text-sm text-muted-foreground">
-                Ultimas atualizacoes
+                Últimas atualizações
               </p>
             </div>
             {isLoading ? (
