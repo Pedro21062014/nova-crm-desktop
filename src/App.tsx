@@ -9,6 +9,7 @@ import { OrdersPage } from "@/components/orders/OrdersPage";
 import { CouponsPage } from "@/components/coupons/CouponsPage";
 import { ChatPage } from "@/components/chat/ChatPage";
 import { WhatsAppPage } from "@/components/whatsapp/WhatsAppPage";
+import { MinhaLojaPage } from "@/components/store/MinhaLojaPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 
 
@@ -34,6 +35,7 @@ function ProtectedRoutes() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/minha-loja" element={<MinhaLojaPage />} />
         <Route path="/produtos" element={<ProductsPage />} />
         <Route path="/clientes" element={<ClientsPage />} />
         <Route path="/pedidos" element={<OrdersPage />} />
