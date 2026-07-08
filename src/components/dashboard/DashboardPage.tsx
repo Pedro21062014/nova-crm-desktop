@@ -18,6 +18,7 @@ import {
 import { Card, Skeleton } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
+import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/utils";
 import { WeeklyChart } from "@/components/dashboard/WeeklyChart";
 import { RecentOrders } from "@/components/dashboard/RecentOrders";
@@ -124,6 +125,7 @@ export function DashboardPage() {
   const { items: clients, loading: clientsLoading } = useClients();
   const { items: products, loading: productsLoading } = useProducts();
   const { config: storeConfig } = useStoreConfig();
+  const { user } = useAuth();
 
   // Time filter state
   const [activePreset, setActivePreset] = useState<PresetRange>("7d");
@@ -282,10 +284,18 @@ export function DashboardPage() {
 
         {/* Right-side actions: Ver Loja + Time Filter */}
         <div className="flex items-center gap-3">
-          {/* Ver Loja — abre o marketplace no navegador padrão */}
+          {/* Ver Loja — abre a página da loja no marketplace no navegador padrão */}
           <button
             onClick={() => {
-              const url = "https://marketplace.novacrm.com.br";
+              // Build the store URL on the marketplace.
+              // Pattern: https://marketplace.novacrm.com.br/store/{merchantId}
+              // Falls back to the marketplace home if we don't have a merchantId yet.
+              const merchantId = user?.uid;
+              const baseUrl = "https://marketplace.novacrm.com.br";
+              const url = merchantId
+                ? `${baseUrl}/store/${merchantId}`
+                : baseUrl;
+
               if (typeof window !== "undefined" && window.electronAPI?.openExternal) {
                 window.electronAPI.openExternal(url).catch((err) => {
                   console.error("Failed to open store URL:", err);
