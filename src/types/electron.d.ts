@@ -132,6 +132,9 @@ interface ElectronAPI {
   onUpdateProgress: (callback: (data: DownloadProgress) => void) => () => void;
   removeAllUpdateListeners: () => void;
 
+  // Shell — open external URL in default browser
+  openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
+
   // WhatsApp (whatsapp-web.js)
   whatsappInit: () => Promise<{ status: "initializing" | "error"; error?: string }>;
   whatsappGetStatus: () => Promise<{

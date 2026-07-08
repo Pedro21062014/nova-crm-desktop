@@ -43,6 +43,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Get app version
   getAppVersion: () => ipcRenderer.invoke("app:get-version"),
 
+  // ── Shell ──
+  // Open an external URL in the user's default browser.
+  // Used by the "Ver Loja" button on the Dashboard.
+  openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
+
   // Listen for update status changes
   onUpdateStatus: (callback) => {
     const handler = (_event, data) => callback(data);

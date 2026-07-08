@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, ipcMain, Notification } = require("electron");
+const { app, BrowserWindow, session, ipcMain, Notification, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
@@ -438,6 +438,31 @@ ipcMain.handle("update:get-state", () => {
 // Get current app version
 ipcMain.handle("app:get-version", () => {
   return app.getVersion();
+});
+
+// ── IPC: Open external URL in default browser ──
+// Used by the "Ver Loja" button in the Dashboard to open the marketplace
+// in the user's default browser instead of a new Electron window.
+ipcMain.handle("shell:open-external", async (_event, url) => {
+  try {
+    if (typeof url !== "string") {
+      return { success: false, error: "URL must be a string" };
+    }
+    // Only allow http/https URLs for security
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return { success: false, error: "Only http/https URLs are allowed" };
+      }
+    } catch {
+      return { success: false, error: "Invalid URL" };
+    }
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (err) {
+    console.error("[Shell] openExternal error:", err);
+    return { success: false, error: err.message };
+  }
 });
 
 // ── IPC: WhatsApp Handlers ──

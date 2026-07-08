@@ -14,9 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versão/tag do release (ex: v2.6.0)'
+        description: 'Versão/tag do release (ex: v2.8.4)'
         required: true
-        default: 'v2.6.0'
+        default: 'v2.8.4'
       prerelease:
         description: 'Marcar como pré-release?'
         required: false

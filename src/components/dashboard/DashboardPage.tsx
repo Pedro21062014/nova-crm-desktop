@@ -12,6 +12,8 @@ import {
   ChevronDown,
   X,
   CheckCircle2,
+  Store,
+  ExternalLink,
 } from "lucide-react";
 import { Card, Skeleton } from "@/components/ui";
 import { useOrders, useClients, useProducts } from "@/hooks/useFirebaseData";
@@ -278,8 +280,30 @@ export function DashboardPage() {
           </p>
         </div>
 
-        {/* Time Filter */}
-        <div className="flex items-center gap-2">
+        {/* Right-side actions: Ver Loja + Time Filter */}
+        <div className="flex items-center gap-3">
+          {/* Ver Loja — abre o marketplace no navegador padrão */}
+          <button
+            onClick={() => {
+              const url = "https://marketplace.novacrm.com.br";
+              if (typeof window !== "undefined" && window.electronAPI?.openExternal) {
+                window.electronAPI.openExternal(url).catch((err) => {
+                  console.error("Failed to open store URL:", err);
+                  window.open(url, "_blank", "noopener,noreferrer");
+                });
+              } else {
+                window.open(url, "_blank", "noopener,noreferrer");
+              }
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-white text-sm font-semibold shadow-sm hover:bg-accent/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            title="Ver sua loja no marketplace"
+          >
+            <Store className="h-4 w-4" />
+            Ver Loja
+            <ExternalLink className="h-3.5 w-3.5 opacity-80" />
+          </button>
+
+          {/* Time Filter */}
           <div className="flex bg-muted p-1 rounded-xl gap-0.5">
             {presetOptions.map(opt => (
               <button
