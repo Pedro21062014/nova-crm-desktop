@@ -44,6 +44,20 @@ autoUpdater.autoDownload = false; // We want to control download manually
 autoUpdater.autoInstallOnAppQuit = true; // Install on quit if downloaded
 autoUpdater.forceDevUpdateConfig = false; // Don't check for updates in dev
 
+// Explicitly set the feed URL so autoUpdater always knows where to look,
+// even if the publish config in package.json isn't picked up correctly.
+// This makes the update check robust across builds and platforms.
+try {
+  autoUpdater.setFeedURL({
+    provider: "github",
+    owner: "Pedro21062014",
+    repo: "nova-crm-desktop",
+  });
+  console.log("[Updater] Feed URL set to github:Pedro21062014/nova-crm-desktop");
+} catch (err) {
+  console.warn("[Updater] Could not set feed URL explicitly:", err.message);
+}
+
 // Track update state
 let updateInfo = null; // { version, releaseNotes, releaseName }
 let downloadProgress = null; // { bytesPerSecond, percent, transferred, total }
@@ -346,15 +360,34 @@ ipcMain.handle("update:check", async () => {
       console.log("[Updater] Skipping check in development mode");
       return { status: "dev", currentVersion: app.getVersion() };
     }
+
+    console.log("[Updater] Manually checking for updates...");
     const result = await autoUpdater.checkForUpdates();
+    const latestVersion = result?.updateInfo?.version || null;
+    const currentVersion = app.getVersion();
+
+    console.log(`[Updater] Check result: current=${currentVersion}, latest=${latestVersion || "none"}`);
+
+    // Safety net: if checkForUpdates() resolved but no updateInfo AND no event
+    // was emitted yet, explicitly notify the renderer that no update is available.
+    // This covers edge cases where electron-updater silently resolves without
+    // firing update-not-available (observed on some Windows builds).
+    if (!latestVersion && !updateInfo && !updateDownloaded) {
+      sendToRenderer("update:status", { status: "not-available", currentVersion });
+    }
+
     return {
       status: "check-initiated",
-      currentVersion: app.getVersion(),
-      latestVersion: result?.updateInfo?.version || null,
+      currentVersion,
+      latestVersion,
     };
   } catch (err) {
     console.error("[Updater] Check error:", err);
-    return { status: "error", error: err.message };
+    // Make sure the renderer knows about the error immediately, even if the
+    // autoUpdater 'error' event was already fired (idempotent — renderer
+    // setState is fine with receiving the same status twice).
+    sendToRenderer("update:status", { status: "error", error: err.message });
+    return { status: "error", error: err.message, currentVersion: app.getVersion() };
   }
 });
 

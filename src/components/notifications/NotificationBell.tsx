@@ -54,7 +54,19 @@ function timeAgo(timestamp: number): string {
 
 // ── Main Component ──
 
-export function NotificationBell() {
+interface NotificationBellProps {
+  /**
+   * Where the bell button is placed inside its parent. This controls the
+   * dropdown panel anchor so the panel never overflows off-screen.
+   * - "top": bell is at the top of its container → panel opens below-top (top-0)
+   * - "bottom": bell is at the bottom of its container → panel opens above-bottom (bottom-0)
+   * In both cases the panel opens to the RIGHT of the bell (left-full) so it
+   * overlays the main content area instead of being clipped by the sidebar.
+   */
+  panelPosition?: "top" | "bottom";
+}
+
+export function NotificationBell({ panelPosition = "top" }: NotificationBellProps = {}) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -116,11 +128,14 @@ export function NotificationBell() {
         {open && (
           <motion.div
             ref={panelRef}
-            initial={{ opacity: 0, y: -8, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+            initial={{ opacity: 0, x: -8, scale: 0.95 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -8, scale: 0.95 }}
             transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
-            className="absolute right-0 top-full mt-2 w-[360px] rounded-2xl bg-card border border-border shadow-lg overflow-hidden z-50"
+            className={cn(
+              "absolute left-full ml-2 w-[360px] max-h-[min(80vh,520px)] rounded-2xl bg-card border border-border shadow-xl overflow-hidden z-50 flex flex-col",
+              panelPosition === "bottom" ? "bottom-0" : "top-0"
+            )}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -159,7 +174,7 @@ export function NotificationBell() {
             )}
 
             {/* List */}
-            <div className="max-h-[400px] overflow-y-auto">
+            <div className="flex-1 overflow-y-auto">
               {loading ? (
                 <div className="flex items-center justify-center py-10">
                   <div className="h-5 w-5 border-2 border-muted-foreground/20 border-t-accent rounded-full animate-spin" />

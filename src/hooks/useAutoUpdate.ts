@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ── Types ──
 
@@ -44,6 +44,11 @@ export function useAutoUpdate() {
     downloadProgress: null,
     error: null,
   });
+
+  // Token to disambiguate concurrent checkForUpdates calls.
+  // When a new check starts, it bumps this token; stale timeouts/results
+  // from older checks will see the token has changed and bail out.
+  const latestCheckTokenRef = useRef<Symbol | null>(null);
 
   // Check if electron API is available
   const isElectron = typeof window !== "undefined" && !!window.electronAPI;
@@ -126,15 +131,63 @@ export function useAutoUpdate() {
   const checkForUpdates = useCallback(async () => {
     if (!isElectron) return;
 
+    // Generate a unique token for this check, so we can detect if a newer
+    // check supersedes this one (avoid stale timeouts overwriting fresh state)
+    const checkToken = Symbol("check");
+    latestCheckTokenRef.current = checkToken;
+
     try {
-      setState(prev => ({ ...prev, status: "checking", error: null }));
+      setState(prev => ({ ...prev, status: "checking", error: null, updateInfo: null, downloadProgress: null }));
       const result = await window.electronAPI.checkForUpdates();
 
+      // Stale check — a newer check was triggered, ignore this result
+      if (latestCheckTokenRef.current !== checkToken) return;
+
       if (result.status === "dev") {
-        setState(prev => ({ ...prev, status: "dev", currentVersion: result.currentVersion || prev.currentVersion }));
+        const cv = result.currentVersion;
+        setState(prev => ({ ...prev, status: "dev", currentVersion: cv || prev.currentVersion }));
+        return;
       }
-      // Other statuses will come through the onUpdateStatus listener
+
+      // Treat IPC-level errors immediately (network failure, GitHub rate limit, etc.)
+      // Without this, the UI would stay stuck on "Verificando..." forever.
+      if (result.status === "error") {
+        const errMsg = result.error || "Erro ao verificar atualizações";
+        const cv = result.currentVersion;
+        setState(prev => ({
+          ...prev,
+          status: "error",
+          error: errMsg,
+          currentVersion: cv || prev.currentVersion,
+        }));
+        return;
+      }
+
+      // status === "check-initiated" — wait for events from autoUpdater
+      // (checking-for-update, update-available, update-not-available, error).
+      // These arrive via the onUpdateStatus listener registered on mount.
+      if (result.currentVersion) {
+        const cv = result.currentVersion;
+        setState(prev => ({ ...prev, currentVersion: cv }));
+      }
+
+      // Safety net: if no event arrives within 15s (e.g., listener missed
+      // the event, or autoUpdater silently resolved without emitting),
+      // fall back to "not-available" so the UI doesn't stay stuck.
+      const fallbackCv = result.currentVersion;
+      window.setTimeout(() => {
+        if (latestCheckTokenRef.current !== checkToken) return; // superseded
+        setState(prev => {
+          if (prev.status !== "checking") return prev; // already resolved
+          return {
+            ...prev,
+            status: "not-available",
+            currentVersion: fallbackCv || prev.currentVersion,
+          };
+        });
+      }, 15000);
     } catch (err: any) {
+      if (latestCheckTokenRef.current !== checkToken) return;
       setState(prev => ({
         ...prev,
         status: "error",

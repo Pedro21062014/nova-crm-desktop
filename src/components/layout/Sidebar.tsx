@@ -116,7 +116,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           />
         )}
         {/* Notification bell - only show when not collapsed */}
-        {!collapsed && <NotificationBell />}
+        {!collapsed && <NotificationBell panelPosition="top" />}
       </div>
 
       {/* Navigation */}
@@ -200,7 +200,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Collapsed notification bell at bottom */}
       {collapsed && (
         <div className="flex justify-center pb-2">
-          <NotificationBell />
+          <NotificationBell panelPosition="bottom" />
         </div>
       )}
 
