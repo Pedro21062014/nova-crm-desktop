@@ -3,7 +3,9 @@
 // Helpers para exportar e importar clientes via planilha .xlsx.
 //
 // Estrutura da planilha (compatível com o modelo usado pelo CRM web):
-//   Colunas: Nome | Email | Telefone | Endereço | CPF/CNPJ | Observações | Criado em
+//   Colunas: Nome | Email | Telefone | Endereço | CPF/CNPJ | Tipo | Observações |
+//            Responsável | Potencial (R$) | Melhor Dia | Última Visita |
+//            Próxima Visita | Criado em
 //
 // Como usar:
 //   - exportClientsToExcel(clients)        -> baixa um arquivo .xlsx
@@ -14,7 +16,23 @@
 // aceita "Nome" / "nome" / "Name", "Telefone" / "phone", etc.
 
 import * as XLSX from "xlsx";
-import type { Client } from "@/services/firebase";
+import type { Client, ClientType } from "@/services/firebase";
+
+// ── Rótulos legíveis para o tipo de cliente ──
+const TYPE_LABEL: Record<ClientType, string> = {
+  common: "Consumidor",
+  commercial: "Ponto Comercial",
+};
+
+function parseClientType(raw: unknown): ClientType {
+  if (typeof raw !== "string") return "common";
+  const v = raw.trim().toLowerCase();
+  if (v === "commercial" || v === "comercial" || v === "ponto comercial" ||
+      v === "ponto" || v === "b2b" || v === "revenda") {
+    return "commercial";
+  }
+  return "common";
+}
 
 // ── Helpers para endereço (igual ao ClientsPage) ──
 function safeStr(val: unknown): string {
@@ -64,13 +82,19 @@ function formatDate(ms: number | null): string {
 
 // ── Colunas da planilha ──
 const COLUMNS = [
-  { key: "nome",        header: "Nome" },
-  { key: "email",       header: "Email" },
-  { key: "telefone",    header: "Telefone" },
-  { key: "endereco",    header: "Endereço" },
-  { key: "cpfCnpj",     header: "CPF/CNPJ" },
-  { key: "observacoes", header: "Observações" },
-  { key: "createdAt",   header: "Criado em" },
+  { key: "nome",               header: "Nome" },
+  { key: "email",              header: "Email" },
+  { key: "telefone",           header: "Telefone" },
+  { key: "endereco",           header: "Endereço" },
+  { key: "cpfCnpj",            header: "CPF/CNPJ" },
+  { key: "clientType",         header: "Tipo" },
+  { key: "observacoes",        header: "Observações" },
+  { key: "contactPerson",      header: "Responsável" },
+  { key: "purchasePotential",  header: "Potencial (R$)" },
+  { key: "bestBuyDay",         header: "Melhor Dia" },
+  { key: "lastVisit",          header: "Última Visita" },
+  { key: "nextVisit",          header: "Próxima Visita" },
+  { key: "createdAt",          header: "Criado em" },
 ] as const;
 
 // Mapeamento de cabeçalhos alternativos (case-insensitive, sem acento)
@@ -85,8 +109,20 @@ const HEADER_ALIASES: Record<string, string> = {
   endereco: "endereco", address: "endereco", "endereço": "endereco",
   // cpfCnpj
   cpfcnpj: "cpfCnpj", "cpf/cnpj": "cpfCnpj", cpf: "cpfCnpj", cnpj: "cpfCnpj", documento: "cpfCnpj", document: "cpfCnpj",
+  // tipo
+  tipo: "clientType", "tipo de cliente": "clientType", clienttype: "clientType", type: "clientType",
   // observacoes
   observacoes: "observacoes", obs: "observacoes", notes: "observacoes", "observação": "observacoes", "observaçãoes": "observacoes",
+  // contactPerson
+  contactperson: "contactPerson", responsavel: "contactPerson", "responsável": "contactPerson", "responsavel pela compra": "contactPerson", contato: "contactPerson",
+  // purchasePotential
+  purchasepotential: "purchasePotential", potencial: "purchasePotential", "potencial de compra": "purchasePotential", "potencial (r$)": "purchasePotential",
+  // bestBuyDay
+  bestbuyday: "bestBuyDay", "melhor dia": "bestBuyDay", "melhor dia de compra": "bestBuyDay", "melhor dia da semana": "bestBuyDay",
+  // lastVisit
+  lastvisit: "lastVisit", "ultima visita": "lastVisit", "última visita": "lastVisit",
+  // nextVisit
+  nextvisit: "nextVisit", "proxima visita": "nextVisit", "próxima visita": "nextVisit", "proxima": "nextVisit", "próxima": "nextVisit",
 };
 
 function normalizeHeader(h: string): string {
@@ -122,6 +158,12 @@ export function exportClientsToExcel(
     for (const col of COLUMNS) {
       if (col.key === "createdAt") {
         row[col.header] = formatDate(toMs((c as any).createdAt));
+      } else if (col.key === "clientType") {
+        const t = (c as any).clientType === "commercial" ? "commercial" : "common";
+        row[col.header] = TYPE_LABEL[t as ClientType];
+      } else if (col.key === "purchasePotential") {
+        const v = (c as any).purchasePotential;
+        row[col.header] = v != null && !isNaN(Number(v)) ? String(Number(v)) : "";
       } else {
         row[col.header] = safeStr((c as any)[col.key]);
       }
@@ -140,7 +182,13 @@ export function exportClientsToExcel(
     { wch: 18 }, // Telefone
     { wch: 40 }, // Endereço
     { wch: 20 }, // CPF/CNPJ
+    { wch: 16 }, // Tipo
     { wch: 40 }, // Observações
+    { wch: 22 }, // Responsável
+    { wch: 14 }, // Potencial (R$)
+    { wch: 14 }, // Melhor Dia
+    { wch: 14 }, // Última Visita
+    { wch: 14 }, // Próxima Visita
     { wch: 18 }, // Criado em
   ];
 
@@ -159,10 +207,42 @@ export function downloadClientTemplate(): void {
   const ws = XLSX.utils.aoa_to_sheet([
     COLUMNS.map((c) => c.header),
     // linha de exemplo (pode ser apagada pelo usuário)
-    ["João da Silva", "joao@exemplo.com", "(11) 99999-9999", "Rua das Flores, 123 - São Paulo/SP", "123.456.789-00", "Cliente VIP", ""],
+    [
+      "João da Silva",
+      "joao@exemplo.com",
+      "(11) 99999-9999",
+      "Rua das Flores, 123 - São Paulo/SP",
+      "123.456.789-00",
+      "Consumidor",
+      "Cliente VIP",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+    // exemplo de Ponto Comercial
+    [
+      "Mercadinho do Bairro LTDA",
+      "compras@mercadinho.com",
+      "(11) 3333-4444",
+      "Av. Brasil, 500 - São Paulo/SP",
+      "12.345.678/0001-99",
+      "Ponto Comercial",
+      "Compra toda sexta",
+      "Sr. Carlos",
+      "5000",
+      "Sexta",
+      "2025-06-30",
+      "2025-07-07",
+      "",
+    ],
   ]);
   ws["!cols"] = [
-    { wch: 30 }, { wch: 30 }, { wch: 18 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 18 },
+    { wch: 30 }, { wch: 30 }, { wch: 18 }, { wch: 40 }, { wch: 20 },
+    { wch: 16 }, { wch: 40 }, { wch: 22 }, { wch: 14 }, { wch: 14 },
+    { wch: 14 }, { wch: 14 }, { wch: 18 },
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Clientes");
@@ -222,6 +302,8 @@ export async function importClientsFromExcel(file: File): Promise<ImportResult> 
     const telefone = get("telefone").trim();
     const endereco = get("endereco").trim();
     const cpfCnpj = get("cpfCnpj").trim();
+    const tipoRaw = get("clientType").trim();
+    const clientType = parseClientType(tipoRaw);
     const observacoes = get("observacoes").trim();
 
     if (!nome && !email && !telefone) {
@@ -235,7 +317,26 @@ export async function importClientsFromExcel(file: File): Promise<ImportResult> 
       return;
     }
 
-    clients.push({ nome, email, telefone, endereco, cpfCnpj, observacoes });
+    const base: Omit<Client, "createdAt" | "updatedAt"> = {
+      nome, email, telefone, endereco, cpfCnpj, observacoes, clientType,
+    };
+
+    // Campos extras apenas para Pontos Comerciais
+    if (clientType === "commercial") {
+      const contactPerson = get("contactPerson").trim();
+      const purchaseRaw = get("purchasePotential").trim();
+      const purchasePotential = purchaseRaw ? Number(purchaseRaw.replace(/[^0-9,.-]/g, "").replace(",", ".")) : NaN;
+      const bestBuyDay = get("bestBuyDay").trim();
+      const lastVisit = get("lastVisit").trim();
+      const nextVisit = get("nextVisit").trim();
+      if (contactPerson) base.contactPerson = contactPerson;
+      if (!isNaN(purchasePotential) && purchasePotential > 0) base.purchasePotential = purchasePotential;
+      if (bestBuyDay) base.bestBuyDay = bestBuyDay;
+      if (lastVisit) base.lastVisit = lastVisit;
+      if (nextVisit) base.nextVisit = nextVisit;
+    }
+
+    clients.push(base);
   });
 
   return {

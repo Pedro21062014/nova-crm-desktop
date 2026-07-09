@@ -16,10 +16,15 @@ import {
   Download,
   FileSpreadsheet,
   CheckCircle2,
+  Store,
+  CalendarClock,
+  CalendarDays,
+  TrendingUp,
+  UserCircle,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useClients } from "@/hooks/useFirebaseData";
-import { type Client } from "@/services/firebase";
+import { type Client, type ClientType } from "@/services/firebase";
 import { formatDate, cn } from "@/lib/utils";
 import {
   exportClientsToExcel,
@@ -55,6 +60,23 @@ function cAddr(c: any): string { return safeStr(c.endereco || c.address); }
 function cDoc(c: any): string { return safeStr(c.cpfCnpj || c.document); }
 function cNotes(c: any): string { return safeStr(c.observacoes || c.notes); }
 
+// Tipo do cliente (com fallback para `common` quando ausente)
+function cType(c: any): ClientType {
+  const t = (c as any)?.clientType;
+  return t === "commercial" ? "commercial" : "common";
+}
+
+function formatBRL(v: number | string | undefined | null): string {
+  if (v == null || v === "") return "—";
+  const n = typeof v === "number" ? v : Number(v);
+  if (isNaN(n)) return String(v);
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+const WEEK_DAYS = [
+  "Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado",
+];
+
 const emptyClient: Omit<Client, "createdAt" | "updatedAt"> = {
   nome: "",
   email: "",
@@ -62,10 +84,12 @@ const emptyClient: Omit<Client, "createdAt" | "updatedAt"> = {
   endereco: "",
   cpfCnpj: "",
   observacoes: "",
+  clientType: "common",
 };
 
 export function ClientsPage() {
   const { items: clients, loading, addItem, editItem, deleteItem, error: clientsError, clearError } = useClients();
+  const [activeTab, setActiveTab] = useState<ClientType>("common");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -83,14 +107,31 @@ export function ClientsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedFileRef = useRef<File | null>(null);
 
+  // ── Filtro por tipo (Consumidor / Ponto Comercial) + busca textual ──
   const filtered = useMemo(() =>
-    clients.filter((c) =>
-      cName(c)?.toLowerCase().includes(search.toLowerCase()) ||
-      cEmail(c)?.toLowerCase().includes(search.toLowerCase()) ||
-      cPhone(c)?.includes(search)
-    ),
-    [clients, search]
+    clients.filter((c) => {
+      const sameTab = cType(c) === activeTab;
+      if (!sameTab) return false;
+      const q = search.toLowerCase();
+      return (
+        cName(c)?.toLowerCase().includes(q) ||
+        cEmail(c)?.toLowerCase().includes(q) ||
+        cPhone(c)?.includes(q)
+      );
+    }),
+    [clients, activeTab, search]
   );
+
+  // Contagem por tipo (para os badges das tabs)
+  const counts = useMemo(() => {
+    let common = 0;
+    let commercial = 0;
+    for (const c of clients) {
+      if (cType(c) === "commercial") commercial++;
+      else common++;
+    }
+    return { common, commercial };
+  }, [clients]);
 
   // Memoize selectedClient to prevent unnecessary re-renders/freezes
   const selectedClient = useMemo(() =>
@@ -100,12 +141,13 @@ export function ClientsPage() {
 
   const openCreate = useCallback(() => {
     setEditingId(null);
-    setForm(emptyClient);
+    setForm({ ...emptyClient, clientType: activeTab });
     setActionError(null);
     setModalOpen(true);
-  }, []);
+  }, [activeTab]);
 
   const openEdit = useCallback((client: Client & { id: string }) => {
+    const t = cType(client);
     setEditingId(client.id);
     setForm({
       nome: cName(client),
@@ -114,7 +156,13 @@ export function ClientsPage() {
       endereco: cAddr(client),
       cpfCnpj: cDoc(client),
       observacoes: cNotes(client),
-    });
+      clientType: t,
+      contactPerson: (client as any).contactPerson || "",
+      purchasePotential: (client as any).purchasePotential ?? "",
+      bestBuyDay: (client as any).bestBuyDay || "",
+      lastVisit: (client as any).lastVisit || "",
+      nextVisit: (client as any).nextVisit || "",
+    } as Omit<Client, "createdAt" | "updatedAt">);
     setActionError(null);
     setModalOpen(true);
   }, []);
@@ -123,10 +171,30 @@ export function ClientsPage() {
     setSaving(true);
     setActionError(null);
     try {
+      // Normaliza payload: garante clientType e remove campos extras
+      // quando o tipo não for commercial (mantém a base limpa).
+      const payload: Record<string, unknown> = {
+        nome: form.nome,
+        email: form.email,
+        telefone: form.telefone,
+        endereco: form.endereco,
+        cpfCnpj: form.cpfCnpj,
+        observacoes: form.observacoes,
+        clientType: form.clientType || "common",
+      };
+      if (form.clientType === "commercial") {
+        payload.contactPerson = form.contactPerson || "";
+        payload.bestBuyDay = form.bestBuyDay || "";
+        payload.lastVisit = form.lastVisit || "";
+        payload.nextVisit = form.nextVisit || "";
+        const potRaw = form.purchasePotential;
+        const potNum = typeof potRaw === "number" ? potRaw : Number(String(potRaw || "").replace(/[^0-9,.-]/g, "").replace(",", "."));
+        payload.purchasePotential = !isNaN(potNum) && potNum > 0 ? potNum : 0;
+      }
       if (editingId) {
-        await editItem(editingId, form as unknown as Partial<Record<string, unknown>>);
+        await editItem(editingId, payload as Partial<Record<string, unknown>>);
       } else {
-        await addItem(form as Record<string, unknown>);
+        await addItem(payload);
       }
       setModalOpen(false);
     } catch (err: any) {
@@ -248,6 +316,49 @@ export function ClientsPage() {
               Novo
             </Button>
           </div>
+
+          {/* Filtro por tipo de cliente */}
+          <div className="flex p-1 bg-muted rounded-xl">
+            <button
+              type="button"
+              onClick={() => { setActiveTab("common"); setSelectedId(null); }}
+              className={cn(
+                "flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold rounded-lg transition-all",
+                activeTab === "common"
+                  ? "bg-background shadow-sm text-accent"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <User className="h-3.5 w-3.5" />
+              Consumidores
+              <span className={cn(
+                "ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-bold",
+                activeTab === "common" ? "bg-accent/15 text-accent" : "bg-muted-foreground/15 text-muted-foreground"
+              )}>
+                {counts.common}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab("commercial"); setSelectedId(null); }}
+              className={cn(
+                "flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold rounded-lg transition-all",
+                activeTab === "commercial"
+                  ? "bg-background shadow-sm text-accent"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Store className="h-3.5 w-3.5" />
+              Pontos Comerciais
+              <span className={cn(
+                "ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-bold",
+                activeTab === "commercial" ? "bg-accent/15 text-accent" : "bg-muted-foreground/15 text-muted-foreground"
+              )}>
+                {counts.commercial}
+              </span>
+            </button>
+          </div>
+
           <Input
             placeholder="Buscar cliente..."
             value={search}
@@ -303,6 +414,7 @@ export function ClientsPage() {
                 const name = cName(client);
                 const email = cEmail(client);
                 const phone = cPhone(client);
+                const isCommercial = cType(client) === "commercial";
                 return (
                   <button
                     key={client.id}
@@ -317,18 +429,30 @@ export function ClientsPage() {
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium",
+                          "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium shrink-0",
                           selectedId === client.id
                             ? "bg-accent text-white"
-                            : "bg-muted text-muted-foreground"
+                            : isCommercial
+                              ? "bg-accent/10 text-accent"
+                              : "bg-muted text-muted-foreground"
                         )}
                       >
-                        {name?.charAt(0)?.toUpperCase() || "?"}
+                        {isCommercial
+                          ? <Store className="h-4 w-4" />
+                          : (name?.charAt(0)?.toUpperCase() || "?")
+                        }
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {name}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {name}
+                          </p>
+                          {isCommercial && (
+                            <span className="shrink-0 inline-flex items-center text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
+                              B2B
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground truncate">
                           {email || phone}
                         </p>
@@ -375,14 +499,35 @@ export function ClientsPage() {
               {/* Header */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-white text-xl font-semibold">
-                    {cName(selectedClient)?.charAt(0)?.toUpperCase()}
+                  <div className={cn(
+                    "flex h-14 w-14 items-center justify-center rounded-2xl text-white text-xl font-semibold",
+                    cType(selectedClient) === "commercial"
+                      ? "bg-gradient-to-br from-accent to-accent/70"
+                      : "bg-accent"
+                  )}>
+                    {cType(selectedClient) === "commercial"
+                      ? <Store className="h-7 w-7" />
+                      : (cName(selectedClient)?.charAt(0)?.toUpperCase() || "?")
+                    }
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-foreground">
-                      {cName(selectedClient)}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-xl font-semibold text-foreground">
+                        {cName(selectedClient)}
+                      </h2>
+                      {cType(selectedClient) === "commercial" ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
+                          <Store className="h-3 w-3" />
+                          Ponto Comercial
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                          <User className="h-3 w-3" />
+                          Consumidor
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">
                       Cliente desde{" "}
                       {selectedClient.createdAt
                         ? formatDate(selectedClient.createdAt)
@@ -464,6 +609,74 @@ export function ClientsPage() {
                 </Card>
               </div>
 
+              {/* Campos extras para Pontos Comerciais (B2B) */}
+              {cType(selectedClient) === "commercial" && (
+                <Card>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Store className="h-4 w-4 text-accent" />
+                    <h3 className="text-sm font-semibold text-foreground">Dados do Ponto Comercial</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-light">
+                        <UserCircle className="h-4 w-4 text-accent" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground">Responsável</p>
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {(selectedClient as any).contactPerson || "Não informado"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-success-light">
+                        <TrendingUp className="h-4 w-4 text-success" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground">Potencial de compra</p>
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {formatBRL((selectedClient as any).purchasePotential)}
+                          <span className="text-[11px] text-muted-foreground ml-1">/mês</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-warning-light">
+                        <CalendarClock className="h-4 w-4 text-warning" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground">Melhor dia de compra</p>
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {(selectedClient as any).bestBuyDay || "Não informado"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted">
+                        <CalendarDays className="h-4 w-4 text-foreground" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground">Última visita</p>
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {(selectedClient as any).lastVisit || "Não informada"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 col-span-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-light">
+                        <CalendarDays className="h-4 w-4 text-accent" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground">Próxima visita</p>
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {(selectedClient as any).nextVisit || "Não programada"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
               {/* Notes */}
               {cNotes(selectedClient) && (
                 <Card>
@@ -480,9 +693,15 @@ export function ClientsPage() {
               animate={{ opacity: 1 }}
               className="flex flex-col items-center justify-center h-full text-center"
             >
-              <User className="h-14 w-14 text-muted-foreground/20" />
+              {activeTab === "commercial" ? (
+                <Store className="h-14 w-14 text-muted-foreground/20" />
+              ) : (
+                <User className="h-14 w-14 text-muted-foreground/20" />
+              )}
               <p className="mt-4 text-sm text-muted-foreground">
-                Selecione um cliente para ver os detalhes
+                {activeTab === "commercial"
+                  ? "Selecione um ponto comercial para ver os detalhes"
+                  : "Selecione um consumidor para ver os detalhes"}
               </p>
             </motion.div>
           )}
@@ -503,18 +722,52 @@ export function ClientsPage() {
               {actionError}
             </div>
           )}
+
+          {/* Tipo de cliente */}
+          <div>
+            <label className="text-sm font-medium text-foreground/80">Tipo de cliente</label>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, clientType: "common" })}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all",
+                  form.clientType !== "commercial"
+                    ? "border-accent bg-accent-light text-accent"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <User className="h-4 w-4" />
+                Consumidor Final
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, clientType: "commercial" })}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all",
+                  form.clientType === "commercial"
+                    ? "border-accent bg-accent-light text-accent"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <Store className="h-4 w-4" />
+                Ponto Comercial (B2B)
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Nome"
               value={form.nome}
               onChange={(e) => setForm({ ...form, nome: e.target.value })}
-              placeholder="Nome completo"
+              placeholder={form.clientType === "commercial" ? "Razão social" : "Nome completo"}
             />
             <Input
               label="CPF/CNPJ"
               value={form.cpfCnpj}
               onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })}
-              placeholder="000.000.000-00"
+              placeholder={form.clientType === "commercial" ? "00.000.000/0000-00" : "000.000.000-00"}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -538,6 +791,59 @@ export function ClientsPage() {
             onChange={(e) => setForm({ ...form, endereco: e.target.value })}
             placeholder="Rua, número, bairro, cidade - UF"
           />
+
+          {/* Campos extras exclusivos para Ponto Comercial */}
+          {form.clientType === "commercial" && (
+            <div className="rounded-xl border border-accent/20 bg-accent-light/40 p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Store className="h-4 w-4 text-accent" />
+                <p className="text-sm font-semibold text-accent">Dados do Ponto Comercial</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Responsável pela compra"
+                  value={(form as any).contactPerson || ""}
+                  onChange={(e) => setForm({ ...form, contactPerson: e.target.value } as any)}
+                  placeholder="Nome do contato"
+                />
+                <Input
+                  label="Potencial de compra (R$/mês)"
+                  type="number"
+                  value={(form as any).purchasePotential ?? ""}
+                  onChange={(e) => setForm({ ...form, purchasePotential: e.target.value } as any)}
+                  placeholder="Ex.: 5000"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-foreground/80">Melhor dia de compra</label>
+                  <select
+                    value={(form as any).bestBuyDay || ""}
+                    onChange={(e) => setForm({ ...form, bestBuyDay: e.target.value } as any)}
+                    className="mt-1.5 flex w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent transition-all"
+                  >
+                    <option value="">Selecione...</option>
+                    {WEEK_DAYS.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <Input
+                  label="Última visita"
+                  type="date"
+                  value={(form as any).lastVisit || ""}
+                  onChange={(e) => setForm({ ...form, lastVisit: e.target.value } as any)}
+                />
+              </div>
+              <Input
+                label="Próxima visita (programada)"
+                type="date"
+                value={(form as any).nextVisit || ""}
+                onChange={(e) => setForm({ ...form, nextVisit: e.target.value } as any)}
+              />
+            </div>
+          )}
+
           <div>
             <label className="text-sm font-medium text-foreground/80">Observações</label>
             <textarea
@@ -596,7 +902,7 @@ export function ClientsPage() {
                   Selecione uma planilha Excel (.xlsx, .xls) ou CSV
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Colunas esperadas: Nome, Email, Telefone, Endereço, CPF/CNPJ, Observações
+                  Colunas esperadas: Nome, Email, Telefone, Endereço, CPF/CNPJ, Tipo (Consumidor / Ponto Comercial), Observações, Responsável, Potencial (R$), Melhor Dia, Última Visita, Próxima Visita
                 </p>
                 <div className="mt-4 flex items-center justify-center gap-2">
                   <Button

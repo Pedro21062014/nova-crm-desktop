@@ -324,6 +324,16 @@ export interface Product {
   updatedAt?: Timestamp | number;
 }
 
+/**
+ * Tipo do cliente.
+ * - `common`     → Consumidor Final (B2C, pessoa física).
+ * - `commercial` → Ponto Comercial (B2B, revenda / estabelecimento).
+ *
+ * Mantemos os mesmos valores usados pelo CRM web (repositório CRM)
+ * para garantir compatibilidade com a base Firestore compartilhada.
+ */
+export type ClientType = "common" | "commercial";
+
 export interface Client {
   nome: string;
   email: string;
@@ -331,6 +341,19 @@ export interface Client {
   endereco?: string;
   cpfCnpj?: string;
   observacoes?: string;
+  /** Tipo do cliente. Default: `common` (Consumidor Final). */
+  clientType?: ClientType;
+  // ── Campos específicos para Pontos Comerciais (B2B) ──
+  /** Responsável pela compra no estabelecimento. */
+  contactPerson?: string;
+  /** Potencial de compra mensal estimado (R$). */
+  purchasePotential?: number;
+  /** Melhor dia da semana para visita/compra (ex.: "Segunda", "Sexta"). */
+  bestBuyDay?: string;
+  /** Data da última visita (ISO YYYY-MM-DD). */
+  lastVisit?: string;
+  /** Data da próxima visita programada (ISO YYYY-MM-DD). */
+  nextVisit?: string;
   createdAt?: Timestamp | number;
   updatedAt?: Timestamp | number;
 }
