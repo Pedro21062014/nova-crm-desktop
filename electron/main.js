@@ -8,7 +8,22 @@ const whatsapp = require("./whatsapp");
 // Disable GPU acceleration for environments without display
 app.disableHardwareAcceleration();
 
-// Select the correct icon format based on platform
+// ── Windows Taskbar / Shortcut identity ──
+// Without an explicit AppUserModelID, Windows groups the app under
+// "electron.exe" in the taskbar and shows the generic Electron icon
+// for desktop/start-menu shortcuts, EVEN IF the .exe has the correct
+// icon embedded and BrowserWindow.icon is set.
+// Setting this before any window is created makes the OS associate
+// the running process with our appId (com.novacrm.desktop), which
+// matches the appId configured in electron-builder (package.json).
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.novacrm.desktop");
+}
+
+// Select the correct icon format based on platform.
+// In packaged mode, __dirname is inside app.asar/electron/, so
+// ../build/icon.{ico,png} resolves to the asar root (build/**/* is
+// included via the electron-builder `files` config).
 const iconPath = path.join(__dirname, "../build/" + (process.platform === "win32" ? "icon.ico" : "icon.png"));
 
 // ── AI Chat Configuration ──
@@ -265,6 +280,20 @@ function createWindow() {
       }
     };
     tryLoad();
+  }
+
+  // Explicitly set the window icon after creation.
+  // On Windows, when packaged, the icon passed in the BrowserWindow
+  // constructor sometimes isn't applied to the taskbar thumbnail /
+  // alt-tab thumbnail — calling setIcon() after creation forces the
+  // OS to refresh and use our icon at all sizes (16/32/48) that the
+  // .ico file provides.
+  try {
+    if (fs.existsSync(iconPath)) {
+      mainWindow.setIcon(iconPath);
+    }
+  } catch (err) {
+    console.warn("[Icon] Could not set window icon:", err.message);
   }
 
   // Open DevTools on F12 (useful for debugging)
