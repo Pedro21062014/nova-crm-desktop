@@ -142,6 +142,7 @@ interface ElectronAPI {
     isConnected: boolean;
     isInitialized: boolean;
     hasQrCode: boolean;
+    qrCode?: string | null;
     error?: string;
   }>;
   whatsappGetChats: () => Promise<{ success: boolean; chats?: WhatsAppChat[]; error?: string }>;

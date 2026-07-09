@@ -410,6 +410,10 @@ function getStatus() {
     isConnected,
     isInitialized,
     hasQrCode: !!qrCodeData,
+    // Include the actual QR string so the renderer can render it immediately
+    // after a page mount / tab switch, without having to wait for the next
+    // `qr` event (which may take a while if the client is already initialized).
+    qrCode: qrCodeData || null,
   };
 }
 

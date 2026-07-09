@@ -228,9 +228,16 @@ export function WhatsAppPage() {
     });
 
     // Listen for QR code
+    // NOTE: we set waStatus="qr" here as well because the `qr` event from the
+    // backend may arrive before the corresponding `whatsapp:status {status:"qr"}`
+    // event (both are emitted in the same handler, but IPC ordering / React
+    // batching can cause the status listener to run after the QR listener on
+    // some platforms). Setting the status explicitly guarantees the QR view
+    // is shown as soon as we have a QR payload.
     const cleanupQr = window.electronAPI.onWhatsappQr((data) => {
       console.log("[WhatsApp] QR Code received");
       setQrCode(data.qr);
+      setWaStatus("qr");
     });
 
     // Listen for incoming messages
@@ -250,6 +257,23 @@ export function WhatsAppPage() {
           msg.id === data.id ? { ...msg, ack: data.ack } : msg
         )
       );
+    });
+
+    // ── Sync current status on mount / tab switch ──
+    // If the backend already has a pending QR (e.g. user navigated away and
+    // came back, or the page reloaded), we need to fetch it so the QR is
+    // shown immediately instead of staying on "disconnected".
+    window.electronAPI.whatsappGetStatus().then((status) => {
+      console.log("[WhatsApp] Initial status:", status.status, "hasQR:", status.hasQrCode);
+      setWaStatus(status.status);
+      if (status.hasQrCode && status.qrCode) {
+        setQrCode(status.qrCode);
+        setWaStatus("qr");
+      } else if (status.status !== "qr") {
+        setQrCode(null);
+      }
+    }).catch((err) => {
+      console.error("[WhatsApp] Failed to fetch initial status:", err);
     });
 
     return () => {
@@ -287,6 +311,26 @@ export function WhatsAppPage() {
       }
     } catch (err: any) {
       setActionError(err.message || "Erro ao conectar WhatsApp");
+      setWaStatus("error");
+    }
+  }, [isElectron]);
+
+  // Regenerate QR code by re-initializing the client.
+  // Used when the current QR has expired (WhatsApp QR codes expire after ~20s
+  // of inactivity and up to 5 scan attempts). This gives the user a manual
+  // way to force a fresh QR without having to disconnect first.
+  const refreshQrCode = useCallback(async () => {
+    if (!isElectron) return;
+    try {
+      setQrCode(null);
+      setWaStatus("connecting");
+      const result = await window.electronAPI.whatsappInit();
+      if (result.status === "error") {
+        setActionError(result.error || "Erro ao gerar novo QR Code");
+        setWaStatus("error");
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Erro ao gerar novo QR Code");
       setWaStatus("error");
     }
   }, [isElectron]);
@@ -639,10 +683,28 @@ export function WhatsAppPage() {
               <p className="text-sm text-muted-foreground mb-6 text-center max-w-sm">
                 Abra o WhatsApp no seu celular, vá em Aparelhos conectados e escaneie o código abaixo.
               </p>
-              {qrCode && <QRCodeDisplay data={qrCode} />}
+              {qrCode ? (
+                <QRCodeDisplay data={qrCode} />
+              ) : (
+                /* QR is on the way (backend emitted status="qr" but the qr
+                   payload hasn't arrived yet). Show a spinner so the user
+                   knows something is happening instead of a blank area. */
+                <div className="flex flex-col items-center justify-center w-[320px] h-[320px] bg-muted rounded-xl">
+                  <RefreshCw className="h-8 w-8 text-muted-foreground animate-spin mb-2" />
+                  <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground mt-4">
                 O QR Code expira em poucos minutos. Se expirar, ele será renovado automaticamente.
               </p>
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={refreshQrCode}
+                icon={<RefreshCw className="h-4 w-4" />}
+              >
+                Atualizar QR Code
+              </Button>
             </Card>
           ) : waStatus === "connected" ? (
             /* Connected - Show chat interface */
