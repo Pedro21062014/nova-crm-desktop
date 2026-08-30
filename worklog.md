@@ -87,3 +87,19 @@ Work Log:
 Stage Summary:
 - v2.9.0: WhatsApp totalmente removido do app desktop (Electron + renderer + Firebase), app mais leve e sem dependência do whatsapp-web.js
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.9.0
+---
+Task ID: 1
+Agent: Main Agent
+Task: Desligar o auto-update dentro do Flatpak e publicar v2.9.1
+
+Work Log:
+- electron/main.js: nova flag IS_FLATPAK (process.env.FLATPAK_ID) que desliga o electron-updater quando o app roda empacotado como Flatpak (check manual, check de inicializacao e check periodico)
+- update:check passa a responder { status: "flatpak" } nesse caso
+- useAutoUpdate.ts: novo status "flatpak" no UpdateStatus, tratado como "dev" (sem UI de atualizacao)
+- UpdateBanner.tsx: nao exibe banner no Flatpak; SettingsPage mostra status "Via Flathub"
+- src/types/electron.d.ts: checkForUpdates aceita status "flatpak"
+- Build validado (tsc -b + vite build), versao 2.9.0 -> 2.9.1, release + pacote .flatpak publicados
+
+Stage Summary:
+- v2.9.1: no Flatpak as atualizacoes passam a ser responsabilidade da Flathub (o app nao tenta mais se auto-atualizar)
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.9.1

@@ -22,6 +22,7 @@ const statusConfig: Record<UpdateStatus, { label: string; color: string; bgColor
   installing: { label: "Instalando atualização...", color: "text-purple-700", bgColor: "bg-purple-50", borderColor: "border-purple-200" },
   error: { label: "Erro ao atualizar", color: "text-red-600", bgColor: "bg-red-50", borderColor: "border-red-200" },
   dev: { label: "Modo desenvolvimento", color: "text-gray-600", bgColor: "bg-gray-50", borderColor: "border-gray-200" },
+  flatpak: { label: "Atualizações pela Flathub", color: "text-gray-600", bgColor: "bg-gray-50", borderColor: "border-gray-200" },
 };
 
 // ── Format bytes ──
@@ -55,7 +56,7 @@ export function UpdateBanner() {
 
   // Don't render if not Electron or status is idle/not-available/dev
   if (!isElectron) return null;
-  if (status === "idle" || status === "not-available" || status === "dev") return null;
+  if (status === "idle" || status === "not-available" || status === "dev" || status === "flatpak") return null;
 
   const config = statusConfig[status];
 

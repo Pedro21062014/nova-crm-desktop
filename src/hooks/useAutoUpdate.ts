@@ -11,7 +11,8 @@ export type UpdateStatus =
   | "downloaded"    // Update downloaded, ready to install
   | "installing"    // Installing (app is about to quit)
   | "error"         // Error occurred
-  | "dev";          // Running in development mode
+  | "dev"           // Running in development mode
+  | "flatpak";      // Running inside Flatpak — updates come from Flathub
 
 export interface UpdateInfo {
   version: string;
@@ -143,9 +144,10 @@ export function useAutoUpdate() {
       // Stale check — a newer check was triggered, ignore this result
       if (latestCheckTokenRef.current !== checkToken) return;
 
-      if (result.status === "dev") {
+      if (result.status === "dev" || result.status === "flatpak") {
+        const status: UpdateStatus = result.status === "flatpak" ? "flatpak" : "dev";
         const cv = result.currentVersion;
-        setState(prev => ({ ...prev, status: "dev", currentVersion: cv || prev.currentVersion }));
+        setState(prev => ({ ...prev, status, currentVersion: cv || prev.currentVersion }));
         return;
       }
 

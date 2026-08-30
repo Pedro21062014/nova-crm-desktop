@@ -175,6 +175,7 @@ export function SettingsPage() {
                   {update.status === "installing" && "Instalando..."}
                   {update.status === "error" && "Erro"}
                   {update.status === "dev" && "Modo desenvolvimento"}
+                  {update.status === "flatpak" && "Via Flathub"}
                 </p>
               </div>
             </div>

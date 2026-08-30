@@ -33,7 +33,7 @@ interface ElectronAPI {
 
   // Auto-Update
   checkForUpdates: () => Promise<{
-    status: "dev" | "check-initiated" | "error";
+    status: "dev" | "flatpak" | "check-initiated" | "error";
     currentVersion?: string;
     latestVersion?: string;
     error?: string;

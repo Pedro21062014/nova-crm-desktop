@@ -54,6 +54,15 @@ loadAIConfig();
 let mainWindow;
 
 // ── Auto-Updater Configuration ──
+// Dentro do Flatpak o app fica em filesystem somente-leitura e quem atualiza
+// e a loja (Flathub). O electron-updater deve ficar desligado nesse caso.
+const IS_FLATPAK = !!process.env.FLATPAK_ID;
+if (IS_FLATPAK) {
+  console.log(
+    `[Updater] Executando dentro do Flatpak (${process.env.FLATPAK_ID}) - auto-update desativado, as atualizacoes vem da Flathub`
+  );
+}
+
 autoUpdater.autoDownload = false; // We want to control download manually
 autoUpdater.autoInstallOnAppQuit = true; // Install on quit if downloaded
 autoUpdater.forceDevUpdateConfig = false; // Don't check for updates in dev
@@ -383,6 +392,11 @@ ipcMain.handle("ai:chat", async (event, messages) => {
 // Check for updates
 ipcMain.handle("update:check", async () => {
   try {
+    if (IS_FLATPAK) {
+      console.log("[Updater] Skipping check: gerenciado pela Flathub");
+      return { status: "flatpak", currentVersion: app.getVersion() };
+    }
+
     if (!app.isPackaged) {
       console.log("[Updater] Skipping check in development mode");
       return { status: "dev", currentVersion: app.getVersion() };
@@ -509,8 +523,8 @@ app.whenReady().then(() => {
   createWindow();
 
   // ── Auto-Update: Check on startup ──
-  // Only check in production (packaged) mode
-  if (app.isPackaged) {
+  // Only check in production (packaged) mode and outside Flatpak
+  if (app.isPackaged && !IS_FLATPAK) {
     // Check for updates 5 seconds after launch (give the app time to load)
     setTimeout(() => {
       console.log("[Updater] Auto-checking for updates...");
