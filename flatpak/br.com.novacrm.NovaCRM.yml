@@ -1,0 +1,73 @@
+# Manifesto Flatpak do Nova CRM
+#
+# Modelo (template): os marcadores 2.9.1 e 51a5294fbdbe301d11bd807f3713b7ee531905abe2244fee9c7e9374476f7eaf sao substituidos
+# por flatpak/build.sh (uso local) ou por .github/workflows/flatpak.yml (CI).
+#
+# Estrategia: reempacotamos o tar.gz oficial gerado pelo electron-builder
+# (npm run electron:build:tar) em vez de compilar o app dentro do Flatpak.
+# Assim o build nao precisa de rede para baixar Electron/npm e o pacote
+# fica identico ao .deb/.AppImage que voce ja distribui.
+
+app-id: br.com.novacrm.NovaCRM
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '25.08'
+command: run.sh
+
+separate-locales: false
+
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --share=network
+  - --env=ELECTRON_TRASH=gio
+  - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
+
+# Se o app piscar ou ficar sem bordas em Wayland, troque as duas linhas
+# acima (fallback-x11 + wayland) por apenas:  - --socket=x11
+
+build-options:
+  env:
+    NPM_CONFIG_LOGLEVEL: info
+
+modules:
+  - name: nova-crm
+    buildsystem: simple
+    build-commands:
+      # Copia o app (conteudo do tar.gz do electron-builder) para /app/main
+      - mkdir -p /app/main
+      - cp -a nova-crm-2.9.1/. /app/main/
+      # Faz o Electron usar o nome de arquivo .desktop do Flatpak (icone no Wayland)
+      - patch-electron-desktop-filename /app/main/resources/app.asar || patch-desktop-filename /app/main/resources/app.asar || true
+      # Wrapper de execucao (zypak)
+      - install -Dm755 -t /app/bin run.sh
+      # Arquivo .desktop
+      - install -Dm644 br.com.novacrm.NovaCRM.desktop /app/share/applications/br.com.novacrm.NovaCRM.desktop
+      # Metadados AppStream (obrigatorios para aparecer na Flathub)
+      - install -Dm644 br.com.novacrm.NovaCRM.metainfo.xml /app/share/metainfo/br.com.novacrm.NovaCRM.metainfo.xml
+      # Icone
+      - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/br.com.novacrm.NovaCRM.png
+    sources:
+      # Pacote oficial do app para Linux (gerado pelo electron-builder)
+      - type: archive
+        url: https://github.com/Pedro21062014/nova-crm-desktop/releases/download/v2.9.1/nova-crm-2.9.1.tar.gz
+        sha256: '51a5294fbdbe301d11bd807f3713b7ee531905abe2244fee9c7e9374476f7eaf'
+        dest: .
+        # strip-components 0 mantem a pasta nova-crm-<versao>/ do electron-builder
+        strip-components: 0
+      # Arquivos de metadados que ficam nesta pasta flatpak/
+      - type: file
+        path: br.com.novacrm.NovaCRM.desktop
+      - type: file
+        path: br.com.novacrm.NovaCRM.metainfo.xml
+      - type: file
+        path: icon.png
+      # Wrapper que inicia o Electron via zypak (fornecido pelo BaseApp)
+      - type: script
+        dest-filename: run.sh
+        commands:
+          - zypak-wrapper.sh /app/main/nova-crm "$@"

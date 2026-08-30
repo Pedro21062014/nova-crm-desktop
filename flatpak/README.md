@@ -113,3 +113,21 @@ Para nova versão:
 - Requisitos da Flathub: <https://docs.flathub.org/docs/for-app-authors/requirements>
 - Metainfo (AppStream): <https://docs.flathub.org/docs/for-app-authors/metainfo-guidelines>
 - Submissão: <https://docs.flathub.org/docs/for-app-authors/submission>
+
+## Manifesto pronto para submissão
+
+O arquivo `br.com.novacrm.NovaCRM.yml` (já com versão e sha256 preenchidos para a 2.9.1)
+é exatamente o que deve ser copiado para a raiz do seu fork do `flathub/flathub`, junto de
+`br.com.novacrm.NovaCRM.desktop`, `br.com.novacrm.NovaCRM.metainfo.xml` e `icon.png`.
+
+Para uma versão nova, regenere com:
+
+```bash
+cd flatpak
+VERSION=2.9.2
+curl -fsSL -o /tmp/nova-crm-$VERSION.tar.gz \
+  https://github.com/Pedro21062014/nova-crm-desktop/releases/download/v$VERSION/nova-crm-$VERSION.tar.gz
+sed -e "s/@VERSION@/$VERSION/g" \
+    -e "s/@SHA256@/$(sha256sum /tmp/nova-crm-$VERSION.tar.gz | cut -d' ' -f1)/g" \
+    br.com.novacrm.NovaCRM.yml.in > br.com.novacrm.NovaCRM.yml
+```
