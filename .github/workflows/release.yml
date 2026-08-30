@@ -111,6 +111,7 @@ jobs:
             release/*.deb
             release/*.dmg
             release/*.AppImage
+            release/*.tar.gz
             release/latest*.yml
             release/*.blockmap
           if-no-files-found: warn
@@ -167,6 +168,7 @@ jobs:
             artifacts/*.deb
             artifacts/*.dmg
             artifacts/*.AppImage
+            artifacts/*.tar.gz
             artifacts/latest*.yml
             artifacts/*.blockmap
           prerelease: ${{ inputs.prerelease }}

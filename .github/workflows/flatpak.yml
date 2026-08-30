@@ -1,0 +1,87 @@
+name: Flatpak
+
+# Gera um pacote Flatpak (.flatpak) do Nova CRM.
+#
+# Roda automaticamente quando um release e publicado, ou manualmente
+# (Actions -> "Flatpak" -> Run workflow) informando a versao (ex: v2.9.0).
+#
+# Pre-requisito: o release precisa conter o arquivo nova-crm-<versao>.tar.gz,
+# gerado pelo electron-builder (target tar.gz ja configurado no package.json).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versao do release (ex: v2.9.0)'
+        required: true
+        default: 'v2.9.0'
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  flatpak:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+    container:
+      # Imagem com flatpak-builder + runtime Freedesktop 25.08.
+      # Tags disponiveis: https://github.com/flathub-infra/actions-images
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then V="${{ github.event.release.tag_name }}"; fi
+          V="${V#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Versao: $V"
+
+      - name: Download release tarball & inject sha256 into manifest
+        shell: bash
+        working-directory: flatpak
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          URL="https://github.com/Pedro21062014/nova-crm-desktop/releases/download/v${VERSION}/nova-crm-${VERSION}.tar.gz"
+          echo "Baixando $URL"
+          curl -fsSL -o "/tmp/nova-crm-${VERSION}.tar.gz" "$URL"
+          SHA256=$(sha256sum "/tmp/nova-crm-${VERSION}.tar.gz" | cut -d' ' -f1)
+          echo "sha256: $SHA256"
+          sed -e "s/@VERSION@/${VERSION}/g" -e "s/@SHA256@/${SHA256}/g" \
+              br.com.novacrm.NovaCRM.yml.in > br.com.novacrm.NovaCRM.yml
+          echo "=== manifesto gerado ==="
+          cat br.com.novacrm.NovaCRM.yml
+
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: Nova-CRM-${{ steps.ver.outputs.version }}.flatpak
+          manifest-path: flatpak/br.com.novacrm.NovaCRM.yml
+          cache-key: flatpak-builder-${{ steps.ver.outputs.version }}
+          verbose: true
+
+      - name: Upload bundle as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-bundle
+          path: ./*.flatpak
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach bundle to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: ./*.flatpak
+          fail_on_unmatched_files: true
+          token: ${{ secrets.GITHUB_TOKEN }}

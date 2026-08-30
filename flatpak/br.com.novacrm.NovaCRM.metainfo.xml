@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>br.com.novacrm.NovaCRM</id>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <!-- ATENCAO: escolha e declare a licenca do seu app.
+       Se for proprietario/comercial, mantenha como abaixo e publique os termos
+       na URL indicada. Se for codigo aberto, troque por um identificador SPDX,
+       por exemplo: <project_license>GPL-3.0-only</project_license> -->
+  <project_license>LicenseRef-proprietary=https://novacrm.com.br/termos</project_license>
+
+  <name>Nova CRM</name>
+  <summary>Gestão de clientes, produtos, pedidos e cupons para pequenas lojas</summary>
+
+  <developer id="br.com.novacrm">
+    <name>Nova CRM Team</name>
+  </developer>
+
+  <description>
+    <p>
+      O Nova CRM é um aplicativo desktop para gerenciar o dia a dia de uma loja:
+      cadastro de produtos e clientes, controle de pedidos, cupons de desconto,
+      configuração da sua loja online, relatórios de faturamento e chat interno.
+    </p>
+    <p>Recursos principais:</p>
+    <ul>
+      <li>Dashboard com faturamento, vendas e pedidos pendentes</li>
+      <li>Cadastro e importação/exportação de clientes e produtos via planilha</li>
+      <li>Gestão de pedidos com status do fluxo de pagamento</li>
+      <li>Cupons de desconto e construtor visual da loja</li>
+      <li>Sincronização em tempo real com a nuvem (Firebase)</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">br.com.novacrm.NovaCRM.desktop</launchable>
+
+  <url type="homepage">https://novacrm.com.br</url>
+  <url type="bugtracker">https://github.com/Pedro21062014/nova-crm-desktop/issues</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/Pedro21062014/nova-crm-desktop/main/flatpak/screenshots/dashboard.png</image>
+      <caption>Dashboard com faturamento e vendas</caption>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">none</content_attribute>
+    <content_attribute id="violence-fantasy">none</content_attribute>
+    <content_attribute id="violence-realistic">none</content_attribute>
+    <content_attribute id="violence-bloodshed">none</content_attribute>
+    <content_attribute id="violence-sexual">none</content_attribute>
+    <content_attribute id="violence-desecration">none</content_attribute>
+    <content_attribute id="violence-slavery">none</content_attribute>
+    <content_attribute id="violence-worship">none</content_attribute>
+    <content_attribute id="drugs-alcohol">none</content_attribute>
+    <content_attribute id="drugs-narcotics">none</content_attribute>
+    <content_attribute id="drugs-tobacco">none</content_attribute>
+    <content_attribute id="sex-nudity">none</content_attribute>
+    <content_attribute id="sex-themes">none</content_attribute>
+    <content_attribute id="sex-homosexuality">none</content_attribute>
+    <content_attribute id="sex-prostitution">none</content_attribute>
+    <content_attribute id="sex-adultery">none</content_attribute>
+    <content_attribute id="sex-appearance">none</content_attribute>
+    <content_attribute id="language-profanity">none</content_attribute>
+    <content_attribute id="language-humor">none</content_attribute>
+    <content_attribute id="language-discrimination">none</content_attribute>
+    <content_attribute id="social-chat">none</content_attribute>
+    <content_attribute id="social-info">none</content_attribute>
+    <content_attribute id="social-audio">none</content_attribute>
+    <content_attribute id="social-location">none</content_attribute>
+    <content_attribute id="social-contacts">none</content_attribute>
+    <content_attribute id="money-purchasing">none</content_attribute>
+    <content_attribute id="money-gambling">none</content_attribute>
+  </content_rating>
+
+  <releases>
+    <release version="2.9.0" date="2026-08-29">
+      <description>
+        <p>Remoção completa do módulo WhatsApp do aplicativo desktop.</p>
+      </description>
+    </release>
+  </releases>
+</component>

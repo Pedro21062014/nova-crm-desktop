@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Nova CRM
+Comment=Gestão de vendas, clientes, produtos e pedidos
+Exec=run.sh
+Icon=br.com.novacrm.NovaCRM
+Terminal=false
+Categories=Office;Finance;
+Keywords=crm;vendas;pedidos;clientes;estoque;
+StartupWMClass=nova-crm
