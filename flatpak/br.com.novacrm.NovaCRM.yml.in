@@ -40,7 +40,7 @@ modules:
     build-commands:
       # Copia o app (conteudo do tar.gz do electron-builder) para /app/main
       - mkdir -p /app/main
-      - cp -a linux-unpacked/. /app/main/
+      - cp -a nova-crm-@VERSION@/. /app/main/
       # Faz o Electron usar o nome de arquivo .desktop do Flatpak (icone no Wayland)
       - patch-desktop-filename /app/main/resources/app.asar || true
       # Wrapper de execucao (zypak)
