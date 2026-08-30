@@ -42,9 +42,9 @@ modules:
       - mkdir -p /app/main
       - cp -a nova-crm-@VERSION@/. /app/main/
       # Faz o Electron usar o nome de arquivo .desktop do Flatpak (icone no Wayland)
-      - patch-desktop-filename /app/main/resources/app.asar || true
+      - patch-electron-desktop-filename /app/main/resources/app.asar || patch-desktop-filename /app/main/resources/app.asar || true
       # Wrapper de execucao (zypak)
-      - install -Dm755 -t /app/bin ../run.sh
+      - install -Dm755 -t /app/bin run.sh
       # Arquivo .desktop
       - install -Dm644 br.com.novacrm.NovaCRM.desktop /app/share/applications/br.com.novacrm.NovaCRM.desktop
       # Metadados AppStream (obrigatorios para aparecer na Flathub)
