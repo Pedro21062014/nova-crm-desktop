@@ -270,7 +270,7 @@ export function ChatPage() {
             icon={<User className="h-4 w-4" />}
           />
           <Input
-            label="Telefone (WhatsApp)"
+            label="Telefone"
             value={newChatForm.customerPhone}
             onChange={(e) => setNewChatForm({ ...newChatForm, customerPhone: e.target.value })}
             placeholder="5511999999999"

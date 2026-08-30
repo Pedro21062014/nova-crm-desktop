@@ -1,22 +1,22 @@
 name: Build & Release Desktop App
 
 # Workflow disparado manualmente via Actions tab -> "Run workflow".
-# Passa uma versão (ex: v2.6.0) e o pipeline:
-#   1. Builda em paralelo Windows (.exe NSIS), Linux (.deb) e macOS (.dmg x64 + arm64)
-#   2. Coleta todos os instaladores como artifacts
-#   3. Cria um Release no GitHub com os 3 instaladores anexados
+# Informe a versao (ex: v2.9.0) e o pipeline:
+#   1. Sincroniza a versão do package.json com a tag informada
+#   2. Builda em paralelo Windows (.exe NSIS), Linux (.deb/.AppImage) e macOS (.dmg x64 + arm64)
+#   3. Publica os instaladores + latest*.yml (auto-update do electron-updater) no Release
 #
 # Requisitos:
-#   - permissions: contents: write (já habilitado abaixo)
+#   - permissions: contents: write (ja habilitado abaixo)
 #   - O token default GITHUB_TOKEN é suficiente (não precisa de PAT)
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versão/tag do release (ex: v2.8.10)'
+        description: 'Versão/tag do release (ex: v2.9.0)'
         required: true
-        default: 'v2.8.10'
+        default: 'v2.9.0'
       prerelease:
         description: 'Marcar como pré-release?'
         required: false
@@ -37,7 +37,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }}
+    name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -62,17 +62,30 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync package.json version with tag
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          echo "Version: $VERSION"
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            p.version = process.argv[1];
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          " "$VERSION"
+
       - name: Build & package (${{ matrix.platform }})
         run: npm run electron:build:${{ matrix.platform }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Linux: o electron-builder precisa de Docker/snap apenas para snap, não para deb
+          # Linux: o electron-builder só precisa de Docker/snap para target snap (não usado)
           # Mac: desabilita code signing automático (sem Apple Developer ID)
           CSC_IDENTITY_AUTO_DISCOVERY: false
           # Desabilita notarização (sem Apple ID)
@@ -131,7 +144,6 @@ jobs:
           du -h artifacts/* 2>/dev/null || true
 
       - name: Generate release notes
-        id: notes
         shell: bash
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
@@ -140,7 +152,6 @@ jobs:
           else
             NOTES=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD 2>/dev/null | head -50)
           fi
-          # Write to file to preserve newlines
           printf '%s\n\n---\n\nBuilt with GitHub Actions on Windows/Linux/macOS runners.\n' "$NOTES" > RELEASE_NOTES.md
           echo "=== Release notes ==="
           cat RELEASE_NOTES.md

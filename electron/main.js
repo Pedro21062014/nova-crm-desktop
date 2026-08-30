@@ -3,7 +3,6 @@ const path = require("path");
 const fs = require("fs");
 const http = require("http");
 const { autoUpdater } = require("electron-updater");
-const whatsapp = require("./whatsapp");
 
 // Disable GPU acceleration for environments without display
 app.disableHardwareAcceleration();
@@ -258,7 +257,6 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
       webSecurity: true,
-      webviewTag: true, // Required for WhatsApp Web embed
     },
   });
 
@@ -303,7 +301,7 @@ function createWindow() {
     }
   });
 
-  // Set User-Agent for webviews (WhatsApp compatibility)
+  // Define um User-Agent de Chromium desktop (compatibilidade com servicos externos)
   mainWindow.webContents.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
   );
@@ -494,138 +492,12 @@ ipcMain.handle("shell:open-external", async (_event, url) => {
   }
 });
 
-// ── IPC: WhatsApp Handlers ──
-
-// Initialize WhatsApp client
-ipcMain.handle("whatsapp:init", async () => {
-  try {
-    whatsapp.initClient(mainWindow);
-    return { status: "initializing" };
-  } catch (err) {
-    console.error("[WhatsApp] Init error:", err);
-    return { status: "error", error: err.message };
-  }
-});
-
-// Get WhatsApp connection status
-ipcMain.handle("whatsapp:status", async () => {
-  try {
-    return whatsapp.getStatus();
-  } catch (err) {
-    console.error("[WhatsApp] Status error:", err);
-    return { status: "error", error: err.message };
-  }
-});
-
-// Get all chats
-ipcMain.handle("whatsapp:get-chats", async () => {
-  try {
-    const chats = await whatsapp.getChats();
-    return { success: true, chats };
-  } catch (err) {
-    console.error("[WhatsApp] Get chats error:", err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Get messages from a chat
-ipcMain.handle("whatsapp:get-messages", async (_event, chatId, limit) => {
-  try {
-    const messages = await whatsapp.getChatMessages(chatId, limit || 50);
-    return { success: true, messages };
-  } catch (err) {
-    console.error("[WhatsApp] Get messages error:", err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Send a text message to a chat
-ipcMain.handle("whatsapp:send-message", async (_event, chatId, text) => {
-  try {
-    const msg = await whatsapp.sendMessage(chatId, text);
-    return { success: true, message: msg };
-  } catch (err) {
-    console.error("[WhatsApp] Send message error:", err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Send a text message to a phone number
-ipcMain.handle("whatsapp:send-to-number", async (_event, phoneNumber, text) => {
-  try {
-    const msg = await whatsapp.sendMessageToNumber(phoneNumber, text);
-    return { success: true, message: msg };
-  } catch (err) {
-    console.error("[WhatsApp] Send to number error:", err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Get contact info
-ipcMain.handle("whatsapp:get-contact", async (_event, contactId) => {
-  try {
-    const contact = await whatsapp.getContactInfo(contactId);
-    return { success: true, contact };
-  } catch (err) {
-    console.error("[WhatsApp] Get contact error:", err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Get chat profile picture
-ipcMain.handle("whatsapp:get-profile-pic", async (_event, chatId) => {
-  try {
-    const result = await whatsapp.getChatProfilePic(chatId);
-    return { success: true, ...result };
-  } catch (err) {
-    return { success: false, profilePicUrl: null };
-  }
-});
-
-// Search contacts
-ipcMain.handle("whatsapp:search-contacts", async (_event, query) => {
-  try {
-    const contacts = await whatsapp.searchContacts(query);
-    return { success: true, contacts };
-  } catch (err) {
-    console.error("[WhatsApp] Search contacts error:", err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Disconnect/Logout WhatsApp
-ipcMain.handle("whatsapp:logout", async () => {
-  try {
-    await whatsapp.logout();
-    return { success: true };
-  } catch (err) {
-    console.error("[WhatsApp] Logout error:", err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Destroy WhatsApp client
-ipcMain.handle("whatsapp:destroy", async () => {
-  try {
-    await whatsapp.destroyClient();
-    return { success: true };
-  } catch (err) {
-    console.error("[WhatsApp] Destroy error:", err);
-    return { success: false, error: err.message };
-  }
-});
-
 // Fix Firebase Auth in Electron: allow Firebase Auth to work with file:// protocol
 // by granting storage access to the Firebase Auth domain
 app.whenReady().then(() => {
   // Grant storage access for Firebase Auth in Electron
   // This allows Firebase Auth to store/retrieve auth tokens
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    callback({ requestHeaders: details.requestHeaders });
-  });
-
-  // Allow webview to load WhatsApp Web properly
-  session.fromPartition("persist:whatsapp").webRequest.onBeforeSendHeaders((details, callback) => {
     callback({ requestHeaders: details.requestHeaders });
   });
 

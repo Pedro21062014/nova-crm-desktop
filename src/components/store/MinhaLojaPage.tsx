@@ -741,13 +741,13 @@ export function MinhaLojaPage() {
               >
                 <div className="space-y-4">
                   <Input
-                    label="WhatsApp"
+                    label="Telefone de atendimento"
                     value={form.whatsapp || ""}
                     onChange={e => setForm({ ...form, whatsapp: e.target.value })}
                     placeholder="5511999999999"
                     icon={<MessageCircle className="h-4 w-4" />}
                   />
-                  <p className="text-xs text-muted-foreground -mt-2">Numero para atendimento e pedidos via WhatsApp. Inclua o codigo do pais.</p>
+                  <p className="text-xs text-muted-foreground -mt-2">Numero para atendimento e pedidos. Inclua o codigo do pais.</p>
                 </div>
               </SectionCard>
 

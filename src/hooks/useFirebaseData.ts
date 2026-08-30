@@ -10,7 +10,6 @@ import {
   type Client,
   type Order,
   type Coupon,
-  type ScheduledMessage,
   COLLECTIONS,
 } from "@/services/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -80,7 +79,7 @@ export function useFirebaseList<T>(subcollection: string) {
               const msg = err.message || "";
               const isPermissionDenied = msg.includes("permission-denied") || msg.includes("Permissão") || msg.includes("Missing or insufficient permissions");
               if (isPermissionDenied) {
-                // For optional subcollections (scheduledMessages, coupons), permission errors are non-critical
+                // For optional subcollections (coupons, etc.), permission errors are non-critical
                 // Just log a warning and show empty data instead of blocking the whole page
                 const isCoreCollection = subcollection === "products" || subcollection === "clients" || subcollection === "orders";
                 if (isCoreCollection) {
@@ -206,6 +205,3 @@ export function useCoupons() {
   return useFirebaseList<Coupon>(COLLECTIONS.COUPONS);
 }
 
-export function useScheduledMessages() {
-  return useFirebaseList<ScheduledMessage>(COLLECTIONS.SCHEDULED_MESSAGES);
-}

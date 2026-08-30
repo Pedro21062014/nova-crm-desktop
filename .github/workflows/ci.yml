@@ -1,9 +1,9 @@
 name: CI
 
-# Validação contínua em cada push / PR.
-# 1. Instala dependências
-# 2. Roda lint
-# 3. Compila TypeScript + build do Vite
+# Validação continua em cada push / PR.
+# 1. Instala dependências (npm ci)
+# 2. Roda lint (não bloqueia)
+# 3. Type-check (tsc) + build do Vite
 # Mantém o código sempre verde antes do release manual.
 
 on:
@@ -33,7 +33,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -46,7 +46,7 @@ jobs:
       - name: Type-check & build (Vite)
         run: npm run build
         env:
-          # Evita travar o Electron builder no CI quando só queremos validar o Vite build
+          # Evita travar o electron-builder no CI quando só queremos validar o Vite build
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload Vite build artifact

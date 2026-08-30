@@ -65,3 +65,25 @@ Stage Summary:
 - Complete rewrite of SettingsPage to match CRM's StoreEditor
 - New features: 4-tab layout, opening hours, address search, visual store builder with preview
 - Files: nova-crm_1.10.0_amd64.deb, Nova-CRM-1.10.0-win-x64.zip
+---
+Task ID: 1
+Agent: Main Agent
+Task: Remover o módulo WhatsApp do app e publicar v2.9.0 com workflow do GitHub Actions
+
+Work Log:
+- Removido electron/whatsapp.js (cliente whatsapp-web.js + sessão LocalAuth + QR code)
+- Removidos os handlers IPC whatsapp:* de electron/main.js (init, status, chats, mensagens, envio, contatos, logout, destroy) e o require do módulo
+- Removida a partição de sessão persist:whatsapp e a liberação de webviewTag (só existia para o embed do WhatsApp Web)
+- Removida toda a API WhatsApp do electron/preload.js (whatsappInit/Send/GetChats/etc. + listeners onWhatsapp*)
+- Removidos os tipos WhatsApp de src/types/electron.d.ts (WhatsAppChat/Message/Contact/Status/QR/Ack + bloco JSX webview)
+- Removida a página src/components/whatsapp/WhatsAppPage.tsx, a rota /whatsapp em App.tsx e o item "WhatsApp" na Sidebar
+- Removida a integração de mensagens agendadas (ScheduledMessage, COLLECTIONS.SCHEDULED_MESSAGES, useScheduledMessages) que só era usada pela página do WhatsApp
+- Removidas as dependências whatsapp-web.js, qrcode, qrcode-terminal e @types/qrcode; package-lock.json regenerado
+- Campo de telefone da loja mantido no Firestore (compatibilidade), mas o rótulo na UI passou a ser "Telefone de atendimento"
+- Workflows .github/workflows/ci.yml e release.yml reescritos: Node 22 (electron 42 exige >=22.12), release sincroniza a versão do package.json com a tag e continua publicando .exe/.deb/.AppImage/.dmg + latest*.yml
+- Build validado localmente: tsc -b + vite build OK
+- Versão 2.8.10 -> 2.9.0, commit + tag v2.9.0 enviados para a main, release gerado pelo workflow
+
+Stage Summary:
+- v2.9.0: WhatsApp totalmente removido do app desktop (Electron + renderer + Firebase), app mais leve e sem dependência do whatsapp-web.js
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.9.0

@@ -10,7 +10,6 @@ import {
   Settings,
   ChevronLeft,
   LogOut,
-  MessageCircle,
   MessageSquare,
   Store,
 
@@ -31,7 +30,6 @@ const navItems = [
   { icon: ShoppingCart, label: "Pedidos", path: "/pedidos" },
   { icon: Tag, label: "Cupons", path: "/cupons" },
   { icon: MessageSquare, label: "Chat", path: "/chat" },
-  { icon: MessageCircle, label: "WhatsApp", path: "/whatsapp" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 

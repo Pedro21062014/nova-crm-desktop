@@ -472,10 +472,7 @@ export const COLLECTIONS = {
   ORDERS: "orders",
   COUPONS: "coupons",
   NOTIFICATIONS: "notifications",
-  SCHEDULED_MESSAGES: "scheduledMessages",
 } as const;
-
-// ── Scheduled Message (WhatsApp integration) ──
 
 export interface Coupon {
   // CRM fields (primary)
@@ -497,17 +494,6 @@ export interface Coupon {
   validoAte?: number; // ms timestamp
   ativo?: boolean;
 
-  createdAt?: Timestamp | number;
-  updatedAt?: Timestamp | number;
-}
-
-export interface ScheduledMessage {
-  titulo: string;
-  mensagem: string;
-  destinatario: string;
-  dataHora: number;          // ms timestamp for when to send
-  recorrencia: "unica" | "diario" | "semanal" | "mensal";
-  status: "agendada" | "enviada" | "falhou";
   createdAt?: Timestamp | number;
   updatedAt?: Timestamp | number;
 }
