@@ -734,6 +734,18 @@ export async function updateMerchantDataRTDB<T>(data: Partial<T>): Promise<void>
 // We need to read from BOTH to be compatible with the CRM.
 
 // Message as stored in RTDB by the CRM
+// Anexo (imagem ou documento) — MESMO formato do CRM web (repo CRM,
+// `components/CustomerChat.tsx`): base64 data URL no campo `data`.
+export interface ChatMessageAttachment {
+  name: string;
+  type: string;
+  size: number;
+  data: string; // Base64 data URL
+  isImage: boolean;
+  compressedSize?: number;
+  originalSize?: number;
+}
+
 export interface ChatMessage {
   id?: string;
   text: string;
@@ -744,6 +756,7 @@ export interface ChatMessage {
   timestamp?: number;  // Optional: nova-crm field
   createdAt?: any;     // RTDB serverTimestamp from CRM
   read?: boolean;
+  attachment?: ChatMessageAttachment; // Imagem/documento (compatível com CRM web)
 }
 
 // Conversation as stored in Firestore by the CRM
@@ -866,18 +879,34 @@ export async function sendChatMessage(
   try {
     const messagesRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}/messages`);
     const newMsgRef = rtdbPush(messagesRef);
-    await rtdbSet(newMsgRef, {
+    const sender = message.sender || message.senderRole || "merchant";
+
+    const msgPayload: Record<string, unknown> = {
       text: message.text,
-      sender: message.sender || message.senderRole || "merchant",
+      sender,
       createdAt: rtdbServerTimestamp(),
-    });
+    };
+    if (message.attachment) {
+      // Anexo em base64 (mesmo formato que o CRM web escreve)
+      msgPayload.attachment = message.attachment;
+    }
+    await rtdbSet(newMsgRef, msgPayload);
+
+    // Preview da última mensagem: texto, ou "📷 Imagem" / "📄 nome" (mesma regra do CRM)
+    const lastMsgText =
+      message.text ||
+      (message.attachment
+        ? message.attachment.isImage
+          ? "📷 Imagem"
+          : `📄 ${message.attachment.name || "Documento"}`
+        : "");
 
     // Update Firestore conversation metadata
     const chatDocRef = doc(db, ensureMerchantPath(), "chats", chatId);
     try {
       await updateDoc(chatDocRef, {
-        lastMessage: message.text,
-        lastMessageSender: "merchant",
+        lastMessage: lastMsgText,
+        lastMessageSender: sender,
         updatedAt: Timestamp.now(),
       } as Record<string, unknown>);
     } catch (fsErr: any) {
@@ -885,8 +914,8 @@ export async function sendChatMessage(
       console.warn("[Chat] Firestore update failed, trying RTDB:", fsErr);
       const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
       await rtdbUpdate(chatRef, {
-        lastMessage: message.text,
-        lastMessageSender: "merchant",
+        lastMessage: lastMsgText,
+        lastMessageSender: sender,
         lastMessageTime: Date.now(),
       } as Record<string, unknown>);
     }

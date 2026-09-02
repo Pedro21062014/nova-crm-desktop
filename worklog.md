@@ -160,3 +160,29 @@ Work Log:
 Stage Summary:
 - v2.10.1: modais das abas novas abrem sem re-renderizar as listas (sem travadinha), bundle inicial ~19% menor
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.1
+---
+Task ID: 1
+Agent: Main Agent
+Task: Exibir e enviar imagens/arquivos no Chat (paridade com o CRM web) e publicar v2.10.2
+
+Work Log:
+- Problema: no chat do desktop as imagens e documentos recebidos (enviados pelo CRM web) nao apareciam — a UI so renderizava msg.text e o sender nao gravava o campo "attachment" na mensagem
+- Referencia: repo base CRM (so leitura) — components/CustomerChat.tsx, components/ChatAttachmentView.tsx, src/utils/chatAttachment.ts e convertFileToBase64 em src/utils/helpers.ts
+- Nova lib src/lib/chatAttachment.ts (port do processChatFile do CRM):
+  - imagens: comprimidas via canvas (max 1024x1024, quality 0.75, WebP > JPEG com fundo branco; PNG/WebP pequenos mantem transparencia)
+  - documentos: limite de 5MB, lidos como data URL base64
+  - formato ChatAttachment {name,type,size,data,isImage,compressedSize,originalSize} — idêntico ao que o CRM web grava
+- services/firebase.ts: interface ChatMessage agora tem attachment?: ChatMessageAttachment; sendChatMessage grava o attachment no push do RTDB e o lastMessage da conversa vira "📷 Imagem" / "📄 nome" quando nao ha texto (mesma regra do CRM)
+- hooks/useChat.ts: sendMessage(text, attachment?) repassa o anexo
+- Componente novo src/components/chat/ChatAttachmentView.tsx (port de ChatAttachmentView.tsx do CRM, com tokens do desktop):
+  - PendingAttachmentBar: preview do anexo acima da input (removivel, mostra tamanho comprimido)
+  - ChatMessageAttachment: dentro da bolha — imagem vira thumbnail clicável (lightbox), documento vira card com download
+  - ImageLightboxModal: zoom em tela cheia + baixar
+- ChatPage.tsx: botao de clipe (aceita image/*, pdf, doc/docx, txt, csv, xlsx, zip) + input de arquivo oculto; da p/ enviar soh com anexo (sem texto); bolha renderiza o anexo acima do texto; lightbox integrado
+- Compatibilidade: o que o CRM web enviar chega no desktop (onValue ja traz o attachment) e o que o desktop enviar chega no CRM web (mesmo formato/caminho no RTDB)
+- Build validado (tsc -b + vite build OK); novos arquivos 100% limpos no eslint; bundle estavel (1820 kB, gzip 542 kB)
+- Versao 2.10.1 -> 2.10.2
+
+Stage Summary:
+- v2.10.2: chat agora mostra imagens (com zoom) e arquivos recebidos, e permite anexar/enviar imagens (comprimidas) e documentos de ate 5MB — mesmo fluxo e formato do CRM web
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.2

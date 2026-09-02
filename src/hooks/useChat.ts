@@ -9,6 +9,7 @@ import {
   deleteChatConversation,
   type ChatMessage,
   type ChatConversation,
+  type ChatMessageAttachment,
   setMerchantId,
 } from "@/services/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -230,12 +231,13 @@ export function useChatMessages(chatId: string | null) {
   }, [user, chatId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, attachment?: ChatMessageAttachment) => {
       if (!user || !chatId) return;
       try {
         await sendChatMessage(chatId, {
           text,
           sender: "merchant",
+          ...(attachment ? { attachment } : {}),
         });
       } catch (err: any) {
         console.error("[useChatMessages] Send error:", err);

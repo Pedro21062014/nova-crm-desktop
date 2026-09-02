@@ -10,13 +10,22 @@ import {
   CheckCircle2,
   AlertCircle,
   Trash2,
+  Paperclip,
+  Loader2,
 } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useChats, useChatMessages, getMsgTime, isMerchantMessage } from "@/hooks/useChat";
 import { useClients } from "@/hooks/useFirebaseData";
-import { type ChatConversation } from "@/services/firebase";
+import { useToast } from "@/hooks/useToast";
+import { type ChatConversation, type ChatMessageAttachment } from "@/services/firebase";
 import { formatDate, cn } from "@/lib/utils";
 import { toMs } from "@/services/firebase";
+import { processChatFile, type ChatAttachment } from "@/lib/chatAttachment";
+import {
+  PendingAttachmentBar,
+  ChatMessageAttachment as MessageAttachmentCard,
+  ImageLightboxModal,
+} from "@/components/chat/ChatAttachmentView";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -323,10 +332,15 @@ export function ChatPage() {
 
 function ChatView({ chatId, conversations }: { chatId: string; conversations: ChatConversation[] }) {
   const { messages, loading, sendMessage } = useChatMessages(chatId);
+  const toast = useToast();
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
+  const [compressingFile, setCompressingFile] = useState(false);
+  const [lightboxAttachment, setLightboxAttachment] = useState<ChatMessageAttachment | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentChat = useMemo(() =>
     conversations.find((c) => c.id === chatId),
@@ -338,14 +352,34 @@ function ChatView({ chatId, conversations }: { chatId: string; conversations: Ch
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!inputText.trim()) return;
-    setSending(true);
+  // Processa o arquivo selecionado (imagem → comprime; documento → limite 5MB)
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite re-selecionar o mesmo arquivo
+    if (!file) return;
+    setCompressingFile(true);
     try {
-      await sendMessage(inputText.trim());
-      setInputText("");
+      const attachment = await processChatFile(file);
+      setPendingAttachment(attachment);
       inputRef.current?.focus();
     } catch (err: any) {
+      toast.error(err.message || "Não foi possível anexar o arquivo");
+    } finally {
+      setCompressingFile(false);
+    }
+  };
+
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text && !pendingAttachment) return;
+    setSending(true);
+    try {
+      await sendMessage(text, pendingAttachment ?? undefined);
+      setInputText("");
+      setPendingAttachment(null);
+      inputRef.current?.focus();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao enviar mensagem");
       console.error("Erro ao enviar mensagem:", err);
     } finally {
       setSending(false);
@@ -421,7 +455,14 @@ function ChatView({ chatId, conversations }: { chatId: string; conversations: Ch
                       {senderDisplay}
                     </p>
                   )}
-                  <p className="text-sm leading-relaxed">{msg.text}</p>
+                  {msg.attachment && (
+                    <MessageAttachmentCard
+                      attachment={msg.attachment}
+                      isSelf={isMerchant}
+                      onOpenImage={(att) => setLightboxAttachment(att)}
+                    />
+                  )}
+                  {msg.text && <p className="text-sm leading-relaxed">{msg.text}</p>}
                   <div className={cn("flex items-center gap-1 mt-1", isMerchant ? "justify-end" : "")}>
                     <span className={cn("text-[10px]", isMerchant ? "text-white/60" : "text-muted-foreground/60")}>
                       {formatMsgTime(msg)}
@@ -439,8 +480,34 @@ function ChatView({ chatId, conversations }: { chatId: string; conversations: Ch
       </div>
 
       {/* Input Area */}
-      <div className="px-4 py-3 border-t border-border shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="shrink-0">
+        {pendingAttachment && (
+          <PendingAttachmentBar
+            attachment={pendingAttachment}
+            onRemove={() => setPendingAttachment(null)}
+          />
+        )}
+        <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xlsx,.zip"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={compressingFile}
+            className="p-2.5 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+            title="Anexar imagem ou documento"
+          >
+            {compressingFile ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Paperclip className="h-4 w-4" />
+            )}
+          </button>
           <input
             ref={inputRef}
             type="text"
@@ -453,13 +520,19 @@ function ChatView({ chatId, conversations }: { chatId: string; conversations: Ch
           <Button
             onClick={handleSend}
             loading={sending}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() && !pendingAttachment}
             icon={<Send className="h-4 w-4" />}
           >
             Enviar
           </Button>
         </div>
       </div>
+
+      {/* Lightbox para zoom de imagens do chat */}
+      <ImageLightboxModal
+        attachment={lightboxAttachment}
+        onClose={() => setLightboxAttachment(null)}
+      />
     </>
   );
 }
