@@ -106,6 +106,7 @@
       "uninstallDisplayName": "Nova CRM ${version}"
     },
     "linux": {
+      "artifactName": "Nova-CRM-${version}.${ext}",
       "target": [
         {
           "target": "deb",
@@ -117,8 +118,7 @@
           "target": "AppImage",
           "arch": [
             "x64"
-          ],
-          "artifactName": "Nova-CRM-${version}.${ext}"
+          ]
         },
         {
           "target": "tar.gz",
