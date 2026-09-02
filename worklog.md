@@ -222,3 +222,22 @@ Work Log:
 Stage Summary:
 - v2.10.4: banner amarelo de offline com aviso de salvamento local + sincronização automática, e "sincronizando" com porcentagem real do progresso
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.4
+---
+Task ID: 1
+Agent: Main Agent
+Task: Corrigir detecção de offline (banner não aparecia sem internet) e publicar v2.10.5
+
+Work Log:
+- Problema: o banner amarelo de offline não aparecia quando a internet caia — o hook dependia dos eventos online/offline do navegador, que no Electron/Linux NÃO disparam (bug conhecido do Electron: navigator.onLine sempre true no Linux)
+- Correção: useOnlineStatus agora faz PING de conectividade no próprio backend do app a cada 10s + ping inicial no mount:
+  - GET https://crm-e-vendas-default-rtdb.firebaseio.com/.json?shallow=-1 (timeout 5s)
+  - QUALQUER resposta HTTP (inclusive 401, pois as rules bloqueiam leitura sem auth) = backend alcançável = online
+  - erro de rede / timeout = offline
+  - validado do sandbox: com internet → HTTP 401 (responde) = online; sem rede o fetch lançaria = offline
+- Máquina de estados: ping falhou durante online/syncing → goOffline (pega conexão caindo no meio do sync); ping ok durante offline → goOnline (sincronização com %); evento "offline" do navegador segue como caminho rápido; evento "online" só reconecta se o ping confirmar
+- Endpoint .info/connected testado e DESCARTADO (redireciona p/ login Google); .json 401 direto + CORS * = ideal
+- Build validado (tsc -b + vite build OK), versao 2.10.4 -> 2.10.5
+
+Stage Summary:
+- v2.10.5: detecção de offline confiável via ping no backend (todas as plataformas) — o banner amarelo aparece de verdade
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.5

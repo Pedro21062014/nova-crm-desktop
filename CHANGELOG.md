@@ -4,6 +4,13 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.10.5] — 2026-09-02
+
+### 🔧 Correções
+- **Detecção de falta de internet corrigida**: agora o app **pinga o próprio backend (Firebase)** a cada 10s — funciona em todas as plataformas (Windows, Linux e macOS), inclusive quando o sistema não avisa a perda de conexão
+- O banner amarelo de offline agora aparece de verdade quando a internet cai (inclusive com o app já aberto)
+- Ao reconectar, a verificação só considera "online" quando o backend de fato responde
+
 ## [2.10.4] — 2026-09-02
 
 ### ✨ Novo
