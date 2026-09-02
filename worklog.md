@@ -186,3 +186,18 @@ Work Log:
 Stage Summary:
 - v2.10.2: chat agora mostra imagens (com zoom) e arquivos recebidos, e permite anexar/enviar imagens (comprimidas) e documentos de ate 5MB — mesmo fluxo e formato do CRM web
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.2
+---
+Task ID: 1
+Agent: Main Agent
+Task: Corrigir exibicao das "novidades da versao" (HTML/lista crua de commits) e publicar v2.10.3
+
+Work Log:
+- Problema: a caixa "Novidades da v2.10.x" em Configuracoes mostrava o body da release bruto — gerado pelo workflow com git log cru ("feat(chat): ... (5ee8ad8)") que o GitHub renderiza como HTML com links de commit (<ul>/<a class="commit-link">), alem do rodape "Built with GitHub Actions"
+- Correcao 1 (exibicao): SettingsPage.tsx ganhou formatReleaseNotes() — remove tags HTML e entidades, descarta rodape de build/separadores/heading de versao, converte ### em subtitulo e - / * em topicos com marcador; negrito inicial do item vira rotulo destacado (renderNoteText); fallback "Veja os detalhes no GitHub." quando nao ha conteudo
+- Correcao 2 (origem): novo CHANGELOG.md no repo raiz com as novidades por versao em pt-BR amigavel; o workflow de release agora extrai a secao da versao atual (awk entre os dois "## [") e usa como body da release; fallback (sem CHANGELOG) agora e git log SEM hash
+- Correcao 3 (releases ja publicadas): body de v2.10.1 e v2.10.2 atualizado via API (PATCH release) com texto limpo — o app ja instalado passa a mostrar as novidades dessas versoes sem o HTML estranho
+- Build validado (tsc -b + vite build OK), versao 2.10.2 -> 2.10.3
+
+Stage Summary:
+- v2.10.3: "Novidades da versao" exibida limpa e organizada (topicos + subtitles), release notes do GitHub geradas do CHANGELOG
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.3

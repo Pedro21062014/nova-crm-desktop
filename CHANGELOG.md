@@ -1,0 +1,41 @@
+# Changelog — Nova CRM Desktop
+
+Todas as mudanças relevantes do aplicativo, em linguagem amigável.
+Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
+e nas release notes do GitHub. A seção da versão atual é usada como body da release.
+
+## [2.10.3] — 2026-09-02
+
+### ✨ Melhorias
+- **Novidades da versão** agora aparecem limpas em Configurações: texto organizado em tópicos, sem HTML, sem links de commit e sem o rodapé de build
+- **Release notes do GitHub** geradas a partir do CHANGELOG, com descrições amigáveis em vez da lista crua de commits
+
+## [2.10.2] — 2026-09-02
+
+### ✨ Novo
+- **Chat com anexos** — agora igual ao CRM web:
+  - Imagens e arquivos **recebidos** aparecem nas conversas (antes sumiam)
+  - Imagens com **zoom em tela cheia** (clique na foto) e botão de **download**
+  - Documentos (PDF, Word, Excel, CSV, TXT, ZIP) aparecem como card com download
+- **Enviar anexos pelo desktop:**
+  - Botão de **clipe** na conversa: imagens (comprimidas automaticamente) e documentos de até **5MB**
+  - Dá para enviar **só o anexo, sem texto**
+  - Tudo sincroniza com o CRM web nos dois sentidos
+
+### 🔧 Correções
+- **Auto-update do AppImage**: nome do arquivo padronizado (`Nova-CRM-2.10.x.AppImage`) — fim dos erros 404 ao atualizar
+
+## [2.10.1] — 2026-09-02
+
+### ⚡ Performance
+- Modais de **Pipeline, Propostas, Tarefas e Automações** abrem sem a travadinha (listas memoizadas)
+- **Bundle inicial ~19% menor** (jsPDF agora carrega só ao gerar o PDF)
+
+### 🔧 Correções
+- Nome do AppImage no artifactName (nível Linux) para o auto-update encontrar o arquivo
+
+## [2.10.0] — 2026-09-02
+
+### ✨ Novo
+- Abas portadas do CRM web: **Pipeline**, **Propostas & Orçamentos**, **Tarefas & Follow-ups** e **Automações**
+- **Auto-update** via GitHub Releases (verificar/baixar/reinstalar pelo app)

@@ -89,8 +89,75 @@ function SectionCard({
 
 // ── Main Component ──
 
+// ── Formatação das release notes ──
+
+type ReleaseNoteLine =
+  | { kind: "heading"; text: string }
+  | { kind: "bullet"; text: string }
+  | { kind: "text"; text: string };
+
+/**
+ * Limpa as release notes vindas da release do GitHub (podem chegar como HTML,
+ * markdown ou lista crua de commits) e devolve linhas prontas para exibir
+ * em tópicos organizados — sem tags, sem links de commit e sem rodapé de build.
+ */
+function formatReleaseNotes(raw: string | { note: string; version: string }[]): ReleaseNoteLine[] {
+  const text = Array.isArray(raw)
+    ? raw.map((n) => n.note || n.version || "").filter(Boolean).join("\n")
+    : raw || "";
+
+  // Remove marcação HTML e entidades comuns
+  const cleaned = text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+
+  const lines: ReleaseNoteLine[] = [];
+  for (const rawLine of cleaned.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    // Ruído para o usuário final: rodapé do workflow, separadores e o heading
+    // de versão (a caixa já mostra "Novidades da v2.10.x")
+    if (/^Built with GitHub Actions/i.test(line)) continue;
+    if (/^-{3,}$/.test(line)) continue;
+    if (/^##\s/.test(line)) continue;
+
+    const heading = line.match(/^###\s+(.*)$/);
+    if (heading) {
+      lines.push({ kind: "heading", text: heading[1].replace(/[*_`]/g, "").trim() });
+      continue;
+    }
+    if (/^[-*]\s+/.test(line)) {
+      lines.push({ kind: "bullet", text: line.replace(/^[-*]\s+/, "").trim() });
+      continue;
+    }
+    lines.push({ kind: "text", text: line });
+  }
+  return lines;
+}
+
+/** Renderiza o texto do tópico, mantendo o **negrito** inicial como rótulo destacado. */
+function renderNoteText(text: string) {
+  const m = text.match(/^\*\*(.+?)\*\*\s*(.*)$/s);
+  if (m) {
+    return (
+      <>
+        <strong className="font-semibold text-foreground">{m[1]}</strong>
+        {m[2] ? <> {m[2]}</> : null}
+      </>
+    );
+  }
+  return text;
+}
+
 export function SettingsPage() {
   const update = useAutoUpdate();
+  const noteLines = formatReleaseNotes(
+    update.updateInfo?.releaseNotes ?? ""
+  );
 
   return (
     <motion.div
@@ -200,12 +267,29 @@ export function SettingsPage() {
                     Novidades da v{update.updateInfo.version}
                   </p>
                 </div>
-                <div className="text-sm text-muted-foreground max-h-32 overflow-y-auto whitespace-pre-wrap">
-                  {typeof update.updateInfo.releaseNotes === "string"
-                    ? update.updateInfo.releaseNotes
-                    : Array.isArray(update.updateInfo.releaseNotes)
-                    ? update.updateInfo.releaseNotes.map((n, i) => `• ${n.note || n.version}`).join("\n")
-                    : "Veja os detalhes no GitHub."}
+                <div className="max-h-44 overflow-y-auto space-y-1">
+                  {noteLines.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Veja os detalhes no GitHub.
+                    </p>
+                  ) : (
+                    noteLines.map((line, i) =>
+                      line.kind === "heading" ? (
+                        <p key={i} className="text-xs font-semibold text-foreground pt-1.5">
+                          {line.text}
+                        </p>
+                      ) : line.kind === "bullet" ? (
+                        <p key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+                          <span>{renderNoteText(line.text)}</span>
+                        </p>
+                      ) : (
+                        <p key={i} className="text-sm text-muted-foreground">
+                          {renderNoteText(line.text)}
+                        </p>
+                      )
+                    )
+                  )}
                 </div>
               </div>
             )}

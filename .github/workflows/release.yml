@@ -147,13 +147,19 @@ jobs:
       - name: Generate release notes
         shell: bash
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$PREV_TAG" ]; then
-            NOTES="Release ${{ inputs.version }} — first automated build pipeline."
+          # Prefere o CHANGELOG.md (descrições amigáveis, em pt-BR): extrai a seção da versão atual
+          if [ -f CHANGELOG.md ]; then
+            awk '/^## \[/{if (n>=1) exit; n++} n>=1{print}' CHANGELOG.md > RELEASE_NOTES.md
           else
-            NOTES=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD 2>/dev/null | head -50)
+            # Fallback: lista de commits (sem hash, para não gerar links de commit nas notes)
+            PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            if [ -z "$PREV_TAG" ]; then
+              NOTES="Release ${{ inputs.version }} — first automated build pipeline."
+            else
+              NOTES=$(git log --pretty=format:"- %s" "$PREV_TAG"..HEAD 2>/dev/null | head -50)
+            fi
+            printf '%s\n' "$NOTES" > RELEASE_NOTES.md
           fi
-          printf '%s\n\n---\n\nBuilt with GitHub Actions on Windows/Linux/macOS runners.\n' "$NOTES" > RELEASE_NOTES.md
           echo "=== Release notes ==="
           cat RELEASE_NOTES.md
 
