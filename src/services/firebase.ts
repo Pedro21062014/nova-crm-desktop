@@ -464,6 +464,151 @@ export interface StoreConfig {
   updatedAt?: Timestamp | number;
 }
 
+// ── ADVANCED CRM TYPES (Pipeline, Proposals, Tasks, Automations) ──
+//
+// Mesmos nomes de campos usados pelo CRM web (repositório CRM) para
+// garantir compatibilidade total com a base Firestore compartilhada:
+//   merchants/{uid}/opportunities  (Pipeline / Oportunidades)
+//   merchants/{uid}/proposals      (Propostas & Orçamentos)
+//   merchants/{uid}/tasks          (Tarefas & Agenda)
+//   merchants/{uid}/automations    (Automações & Regras)
+
+export type PipelineStage =
+  | "lead"
+  | "contact"
+  | "proposal"
+  | "negotiation"
+  | "won"
+  | "lost";
+
+export interface OpportunityItem {
+  productId?: string;
+  productName: string;
+  quantity: number;
+  price: number;
+}
+
+export interface Opportunity {
+  id?: string;
+  title: string;
+  clientId?: string;
+  clientName: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  value: number;
+  stage: PipelineStage;
+  probability: number; // 0 a 100
+  expectedCloseDate?: string; // YYYY-MM-DD
+  items?: OpportunityItem[];
+  lossReason?: string;
+  notes?: string;
+  priority?: "low" | "medium" | "high";
+  assignedTo?: string;
+  tags?: string[];
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
+}
+
+export interface ProposalItem {
+  productId?: string;
+  name: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export type ProposalStatus =
+  | "draft"
+  | "sent"
+  | "viewed"
+  | "approved"
+  | "rejected";
+
+export interface CommercialProposal {
+  id?: string;
+  proposalNumber: string;
+  title: string;
+  clientId?: string;
+  clientName: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  clientDocument?: string;
+  clientAddress?: string;
+  items: ProposalItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  validUntil: string; // YYYY-MM-DD
+  paymentTerms: string;
+  notes?: string;
+  status: ProposalStatus;
+  publicToken?: string;
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
+}
+
+export type CRMTaskType =
+  | "call"
+  | "meeting"
+  | "whatsapp"
+  | "email"
+  | "followup"
+  | "proposal"
+  | "other";
+
+export type CRMTaskPriority = "low" | "medium" | "high";
+export type CRMTaskStatus = "pending" | "completed" | "cancelled";
+
+export interface CRMTask {
+  id?: string;
+  title: string;
+  description?: string;
+  type: CRMTaskType;
+  dueDate: string; // YYYY-MM-DD
+  dueTime?: string; // HH:mm
+  priority: CRMTaskPriority;
+  status: CRMTaskStatus;
+  clientId?: string;
+  clientName?: string;
+  clientPhone?: string;
+  opportunityId?: string;
+  completedAt?: Timestamp | number | null;
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
+}
+
+export type CRMAutomationTrigger =
+  | "client_created"
+  | "order_created"
+  | "order_paid"
+  | "proposal_approved"
+  | "opportunity_won"
+  | "inactive_client_30d";
+
+export type CRMAutomationAction =
+  | "create_task"
+  | "send_telegram"
+  | "update_client_status"
+  | "add_notification";
+
+export interface CRMAutomation {
+  id?: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  trigger: CRMAutomationTrigger;
+  conditionField?: string;
+  conditionOperator?: "equals" | "greater_than" | "contains";
+  conditionValue?: string;
+  actionType: CRMAutomationAction;
+  actionConfig: Record<string, any>;
+  executionsCount: number;
+  lastExecutedAt?: Timestamp | number | null;
+  createdAt?: Timestamp | number;
+  updatedAt?: Timestamp | number;
+}
+
 // ── Collection names ──
 
 export const COLLECTIONS = {
@@ -472,6 +617,10 @@ export const COLLECTIONS = {
   ORDERS: "orders",
   COUPONS: "coupons",
   NOTIFICATIONS: "notifications",
+  PIPELINE: "opportunities",
+  PROPOSALS: "proposals",
+  TASKS: "tasks",
+  AUTOMATIONS: "automations",
 } as const;
 
 export interface Coupon {

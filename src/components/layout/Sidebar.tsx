@@ -12,7 +12,10 @@ import {
   LogOut,
   MessageSquare,
   Store,
-
+  TrendingUp,
+  FileText,
+  CalendarCheck,
+  Zap,
 } from "lucide-react";
 import logoSvg from "/logo.svg";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,6 +32,10 @@ const navItems = [
   { icon: Users, label: "Clientes", path: "/clientes" },
   { icon: ShoppingCart, label: "Pedidos", path: "/pedidos" },
   { icon: Tag, label: "Cupons", path: "/cupons" },
+  { icon: TrendingUp, label: "Pipeline", path: "/pipeline" },
+  { icon: FileText, label: "Propostas", path: "/propostas" },
+  { icon: CalendarCheck, label: "Tarefas", path: "/tarefas" },
+  { icon: Zap, label: "Automações", path: "/automacoes" },
   { icon: MessageSquare, label: "Chat", path: "/chat" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];

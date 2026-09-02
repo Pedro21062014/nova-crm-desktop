@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { ToastProvider } from "@/hooks/useToast";
 import { AppLayout } from "@/components/layout";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { DashboardPage } from "@/components/dashboard/DashboardPage";
@@ -7,6 +8,10 @@ import { ProductsPage } from "@/components/products/ProductsPage";
 import { ClientsPage } from "@/components/clients/ClientsPage";
 import { OrdersPage } from "@/components/orders/OrdersPage";
 import { CouponsPage } from "@/components/coupons/CouponsPage";
+import { PipelinePage } from "@/components/pipeline/PipelinePage";
+import { ProposalsPage } from "@/components/proposals/ProposalsPage";
+import { TasksPage } from "@/components/tasks/TasksPage";
+import { AutomationsPage } from "@/components/automations/AutomationsPage";
 import { ChatPage } from "@/components/chat/ChatPage";
 import { MinhaLojaPage } from "@/components/store/MinhaLojaPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
@@ -39,6 +44,10 @@ function ProtectedRoutes() {
         <Route path="/clientes" element={<ClientsPage />} />
         <Route path="/pedidos" element={<OrdersPage />} />
         <Route path="/cupons" element={<CouponsPage />} />
+        <Route path="/pipeline" element={<PipelinePage />} />
+        <Route path="/propostas" element={<ProposalsPage />} />
+        <Route path="/tarefas" element={<TasksPage />} />
+        <Route path="/automacoes" element={<AutomationsPage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/configuracoes" element={<SettingsPage />} />
 
@@ -51,9 +60,11 @@ function ProtectedRoutes() {
 export function App() {
   return (
     <HashRouter>
-      <AuthProvider>
-        <ProtectedRoutes />
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <ProtectedRoutes />
+        </AuthProvider>
+      </ToastProvider>
     </HashRouter>
   );
 }

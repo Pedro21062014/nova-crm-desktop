@@ -103,3 +103,32 @@ Work Log:
 Stage Summary:
 - v2.9.1: no Flatpak as atualizacoes passam a ser responsabilidade da Flathub (o app nao tenta mais se auto-atualizar)
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.9.1
+---
+Task ID: 1
+Agent: Main Agent
+Task: Portar abas de Automações, Propostas, Pipeline e Tarefas do CRM web para o app desktop e preparar release
+
+Work Log:
+- Explorou o repositório CRM (Pedro21062014/CRM) em modo somente-leitura para entender as 4 abas avançadas e como elas chamam o Firebase (coleções, campos, timestamps, seed de receitas)
+- Mapeou as coleções Firestore compartilhadas:
+  - merchants/{uid}/automations   (Automações & Regras, CRMAutomation)
+  - merchants/{uid}/proposals     (Propostas & Orçamentos, CommercialProposal)
+  - merchants/{uid}/opportunities (Pipeline de Vendas, Opportunity)
+  - merchants/{uid}/tasks         (Tarefas & Agenda, CRMTask)
+- Adicionou os tipos Opportunity/Proposal/Task/Automation e as chaves de coleção (PIPELINE, PROPOSALS, TASKS, AUTOMATIONS) em src/services/firebase.ts
+- Criou hooks usePipeline/useProposals/useTasks/useAutomations em src/hooks/useFirebaseData.ts
+- Criou src/lib/crmData.ts com helpers de compatibilidade (nome/telefone do cliente e produto nos dois formatos), sanitizeFirestoreData (mesma lógica do CRM) e utilitários de data/shell
+- Criou src/hooks/useToast.tsx (sistema de toasts leve estilo sonner, sem dependência nova) + ToastProvider em src/App.tsx
+- Implementou 4 páginas novas seguindo o padrão visual do desktop (tema shadcn, motion, Card/Button/Input/Modal):
+  - src/components/pipeline/PipelinePage.tsx  (kanban 6 etapas, métricas, mover etapa com probabilidade, link produtos)
+  - src/components/proposals/ProposalsPage.tsx (PDF via jsPDF, compartilhar WhatsApp, converter em pedido, itens do catálogo)
+  - src/components/tasks/TasksPage.tsx        (hoje/atrasadas/próximas/concluídas, vínculo cliente+oportunidade, WhatsApp)
+  - src/components/automations/AutomationsPage.tsx (seed das receitas padrão do CRM, toggle ativo, visualizador de fluxo)
+- Rotas /pipeline, /propostas, /tarefas, /automacoes em src/App.tsx e itens no Sidebar.tsx (TrendingUp/FileText/CalendarCheck/Zap)
+- Adicionou jspdf (^4.2.1) como dependência para geração de PDF das propostas
+- Build validado (tsc -b + vite build OK); versão 2.9.1 -> 2.10.0
+
+Stage Summary:
+- 4 abas avançadas do CRM (Pipeline, Propostas, Tarefas, Automações) agora disponíveis no app desktop, lendo/escrevendo as mesmas coleções Firestore do CRM web
+- v2.10.0 pronto para o workflow de release (Build & Release Desktop App)
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.0

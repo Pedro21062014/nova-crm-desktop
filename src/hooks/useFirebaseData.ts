@@ -10,6 +10,10 @@ import {
   type Client,
   type Order,
   type Coupon,
+  type Opportunity,
+  type CommercialProposal,
+  type CRMTask,
+  type CRMAutomation,
   COLLECTIONS,
 } from "@/services/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -203,5 +207,23 @@ export function useOrders() {
 
 export function useCoupons() {
   return useFirebaseList<Coupon>(COLLECTIONS.COUPONS);
+}
+
+// ── Advanced CRM (mesmas coleções usadas pelo CRM web) ──
+
+export function usePipeline() {
+  return useFirebaseList<Opportunity>(COLLECTIONS.PIPELINE);
+}
+
+export function useProposals() {
+  return useFirebaseList<CommercialProposal>(COLLECTIONS.PROPOSALS);
+}
+
+export function useTasks() {
+  return useFirebaseList<CRMTask>(COLLECTIONS.TASKS);
+}
+
+export function useAutomations() {
+  return useFirebaseList<CRMAutomation>(COLLECTIONS.AUTOMATIONS);
 }
 
