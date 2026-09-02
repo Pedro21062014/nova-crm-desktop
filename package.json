@@ -117,7 +117,8 @@
           "target": "AppImage",
           "arch": [
             "x64"
-          ]
+          ],
+          "artifactName": "Nova-CRM-${version}.${ext}"
         },
         {
           "target": "tar.gz",

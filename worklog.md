@@ -132,3 +132,14 @@ Stage Summary:
 - 4 abas avançadas do CRM (Pipeline, Propostas, Tarefas, Automações) agora disponíveis no app desktop, lendo/escrevendo as mesmas coleções Firestore do CRM web
 - v2.10.0 pronto para o workflow de release (Build & Release Desktop App)
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.0
+---
+Task ID: 1
+Agent: Main Agent
+Task: Corrigir 404 no auto-update do AppImage (latest-linux.yml vs nome do asset)
+
+Work Log:
+- Diagnóstico: electron-builder gerava o AppImage com nome "Nova CRM-2.10.0.AppImage" (com ESPAÇO, do productName), mas o latest-linux.yml referenciava "Nova-CRM-2.10.0.AppImage" (traço) e o GitHub subiu o asset como "Nova.CRM-2.10.0.AppImage" (ponto)
+- Consequencia: o electron-updater tentava baixar Nova-CRM-2.10.0.AppImage -> 404 ao verificar atualizacoes pelo app
+- Correcao imediata (v2.10.0): renomeado o asset via API do GitHub para Nova-CRM-2.10.0.AppImage (mesmo nome do manifest); conteudo/sha512 inalterados
+- Bloco do blockmap do AppImage nao e fatal no electron-updater 6.8.9: falta dele apenas desabilita o download diferencial (fallback para download completo)
+- Correcao permanente: artifactName explicito "Nova-CRM-${version}.${ext}" no target AppImage do package.json (sem espaco, casa com o manifest em todos os proximos releases)
