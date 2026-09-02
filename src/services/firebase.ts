@@ -3,10 +3,10 @@ import {
   doc,
   getDoc,
   getDocs,
-  addDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
+  addDoc as fsAddDoc,
+  setDoc as fsSetDoc,
+  updateDoc as fsUpdateDoc,
+  deleteDoc as fsDeleteDoc,
   onSnapshot,
   query,
   limit,
@@ -20,10 +20,10 @@ import {
 import {
   ref as rtdbRef,
   get as rtdbGet,
-  set as rtdbSet,
-  update as rtdbUpdate,
+  set as rtdbSetRaw,
+  update as rtdbUpdateRaw,
   push as rtdbPush,
-  remove as rtdbRemove,
+  remove as rtdbRemoveRaw,
   onValue,
   off,
   onChildAdded,
@@ -34,8 +34,28 @@ import {
   query as rtdbQuery,
   type Unsubscribe as RtdbUnsubscribe,
 } from "firebase/database";
+import { trackWrite } from "@/lib/syncTracker";
 import { db, rtdb } from "@/lib/firebase";
 import { auth } from "@/lib/firebase";
+
+// ── Wrappers de escrita (sync tracker) ──
+// Toda escrita passa pelo trackWrite: fica "em voo" até o ack do servidor.
+// Quando o app volta da offline, esses contadores alimentam a porcentagem
+// real do banner "Sincronizando..." no topo do app.
+const rtdbSet: typeof rtdbSetRaw = (ref, value) => trackWrite(rtdbSetRaw(ref, value));
+const rtdbUpdate: typeof rtdbUpdateRaw = (ref, value) => trackWrite(rtdbUpdateRaw(ref, value));
+const rtdbRemove: typeof rtdbRemoveRaw = (ref) => trackWrite(rtdbRemoveRaw(ref));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- assinatura genérica do Firestore
+const setDoc = ((reference: any, data: any, options?: any) =>
+  options === undefined
+    ? trackWrite(fsSetDoc(reference, data))
+    : trackWrite(fsSetDoc(reference, data, options))) as typeof fsSetDoc;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- aceita os 3 formatos (data | field+value | mais campos)
+const updateDoc = ((...args: any[]) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  trackWrite((fsUpdateDoc as any)(...args))) as typeof fsUpdateDoc;
+const addDoc: typeof fsAddDoc = (...args) => trackWrite(fsAddDoc(...args));
+const deleteDoc: typeof fsDeleteDoc = (...args) => trackWrite(fsDeleteDoc(...args));
 
 // ── Merchant Resolution ──
 //

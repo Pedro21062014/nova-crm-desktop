@@ -4,6 +4,13 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.10.4] — 2026-09-02
+
+### ✨ Novo
+- **Modo offline com aviso**: banner **amarelo** no topo quando não há internet, avisando que suas alterações serão **salvas localmente**
+- **Sincronização automática**: ao reconectar, o banner mostra **"Sincronizando..." com a porcentagem real** do progresso (cada alteração confirmada no servidor avança a barra)
+- Tudo que foi editado offline é enviado automaticamente para o Firebase quando a conexão volta
+
 ## [2.10.3] — 2026-09-02
 
 ### ✨ Melhorias

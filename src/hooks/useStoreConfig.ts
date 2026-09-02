@@ -5,7 +5,8 @@ import {
   type StoreConfig,
 } from "@/services/firebase";
 import { useAuth } from "@/hooks/useAuth";
-import { doc, onSnapshot, setDoc, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, setDoc as fsSetDoc, Timestamp } from "firebase/firestore";
+import { trackWrite } from "@/lib/syncTracker";
 import { db } from "@/lib/firebase";
 
 // Helper: safely convert any value to a string for form inputs
@@ -232,7 +233,7 @@ export function useStoreConfig() {
         console.log("[useStoreConfig] Saving storeConfig:", dotNotationUpdate);
 
         const docRef = doc(db, "merchants", uid);
-        await setDoc(docRef, dotNotationUpdate, { merge: true });
+        await trackWrite(fsSetDoc(docRef, dotNotationUpdate, { merge: true }));
         console.log("[useStoreConfig] Config saved to Firestore");
 
       } catch (err: any) {

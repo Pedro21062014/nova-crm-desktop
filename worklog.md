@@ -201,3 +201,24 @@ Work Log:
 Stage Summary:
 - v2.10.3: "Novidades da versao" exibida limpa e organizada (topicos + subtitles), release notes do GitHub geradas do CHANGELOG
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.3
+---
+Task ID: 1
+Agent: Main Agent
+Task: Banner offline/sincronização no topo (amarelo sem internet + sincronizando com %) e publicar v2.10.4
+
+Work Log:
+- Pedido: no topo (na mesma posição do banner de atualização), quando a pessoa desativa a internet → banner AMARELO avisando que está sem internet, que as alterações serão salvas localmente e que ao reconectar será sincronizado automaticamente; ao reconectar → banner "sincronizando" com PERCENTAGEM de progresso
+- Nova lib src/lib/syncTracker.ts: conta escritas "em voo" (enviadas, sem ack do servidor) — cada escrita (RTDB set/update/remove e Firestore setDoc/updateDoc/addDoc/deleteDoc) passa por trackWrite e decrementa no ack; expõe pendingWrites() e onPendingWritesChange()
+- services/firebase.ts: todas as escritas do app agora passam pelos wrappers trackWrite (rtdbSet/rtdbUpdate/rtdbRemove/setDoc/updateDoc/addDoc/deleteDoc) — centralizadas, sem tocar nas páginas
+- useStoreConfig.ts: a única escrita direta fora do service (setDoc de storeConfig) também passou por trackWrite
+- hooks/useOnlineStatus.ts: máquina de estados online/offline/syncing + syncPercent REAL:
+  - "online" → baseline = quantas escritas estavam na fila; percent = (1 - pendentes/baseline)*100 (99% máx até concluir)
+  - conclusão = 0 pendentes no tracker E waitForPendingWrites (cobre o que não passa pelo tracker) E tempo mínimo de 1,2s (sem pisca-pisca)
+  - timer de segurança de 60s caso algum ack não chegue; cair a conexão durante o sync volta p/ offline e recomeça do zero ao reconectar
+  - testado por simulação com 3 cenários (acks antes do tempo mínimo, reconexão sem fila, queda durante o sync)
+- OfflineBanner.tsx: offline = bg-warning (amarelo) 2 linhas ("Sem conexão com a internet" + "Suas alterações serão salvas localmente e sincronizadas automaticamente quando a conexão voltar"); syncing = "Sincronizando alterações salvas localmente..." + porcentagem à direita + barra de progresso animada; ao concluir mostra "Sincronização concluída" por ~1,2s
+- Build validado (tsc -b + vite build OK), versao 2.10.3 -> 2.10.4
+
+Stage Summary:
+- v2.10.4: banner amarelo de offline com aviso de salvamento local + sincronização automática, e "sincronizando" com porcentagem real do progresso
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.4
