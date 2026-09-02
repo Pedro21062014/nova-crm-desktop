@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -82,6 +82,190 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Board memozizado: só re-renderiza quando a lista de oportunidades filtrada
+// muda (snapshot novo do Firestore) — abrir/fechar o modal ou digitar no
+// formulário NÃO re-renderiza o kanban inteiro.
+// ─────────────────────────────────────────────────────────────────────────────
+interface PipelineBoardProps {
+  opps: PipelineOpp[];
+  onEdit: (opp: PipelineOpp) => void;
+  onDelete: (opp: PipelineOpp) => void;
+  onMoveStage: (opp: PipelineOpp, stage: PipelineStage) => void;
+}
+
+const PipelineBoard = memo(function PipelineBoard({
+  opps,
+  onEdit,
+  onDelete,
+  onMoveStage,
+}: PipelineBoardProps) {
+  return (
+    <motion.div
+      variants={itemVariants}
+      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4"
+    >
+      {PIPELINE_STAGES.map((stageItem) => {
+        const stageOpps = opps.filter((o) => o.stage === stageItem.id);
+        const stageTotal = stageOpps.reduce((sum, o) => sum + (o.value || 0), 0);
+        const stageIndex = PIPELINE_STAGES.findIndex((s) => s.id === stageItem.id);
+
+        return (
+          <div
+            key={stageItem.id}
+            className={cn(
+              "flex flex-col rounded-2xl border bg-background p-3.5 min-h-[240px] 2xl:min-h-[480px]",
+              stageItem.id === "won" && "border-success/40 bg-success-light/40",
+              stageItem.id === "lost" && "border-danger/40 bg-danger-light/40"
+            )}
+          >
+            {/* Column header */}
+            <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
+              <div>
+                <h3 className={cn("font-bold text-sm", stageItem.accent)}>
+                  {stageItem.label}
+                </h3>
+                <span className="text-xs text-muted-foreground font-medium">
+                  {formatCurrency(stageTotal)}
+                </span>
+              </div>
+              <Badge className={stageItem.chip}>{stageOpps.length}</Badge>
+            </div>
+
+            {/* Cards */}
+            <div className="flex-1 space-y-3 overflow-y-auto">
+              {stageOpps.length === 0 ? (
+                <div className="h-28 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl text-xs text-muted-foreground text-center px-4">
+                  Nenhuma oportunidade nesta etapa
+                </div>
+              ) : (
+                stageOpps.map((opp) => (
+                  <div
+                    key={opp.id}
+                    className="rounded-xl border border-border bg-card p-3.5 shadow-xs hover:shadow-md transition-all"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <h4
+                        onClick={() => onEdit(opp)}
+                        className="font-bold text-sm text-foreground hover:text-accent cursor-pointer line-clamp-1"
+                      >
+                        {opp.title}
+                      </h4>
+                      <Badge
+                        variant={
+                          opp.priority === "high"
+                            ? "danger"
+                            : opp.priority === "medium"
+                            ? "warning"
+                            : "default"
+                        }
+                      >
+                        {opp.priority === "high"
+                          ? "Alta"
+                          : opp.priority === "medium"
+                          ? "Média"
+                          : "Baixa"}
+                      </Badge>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground font-medium mt-1 flex items-center gap-1.5">
+                      <span className="truncate">{opp.clientName}</span>
+                      {opp.clientPhone && (
+                        <button
+                          onClick={() =>
+                            openExternalLink(
+                              `https://wa.me/${opp.clientPhone!.replace(/\D/g, "")}`
+                            )
+                          }
+                          className="text-success hover:text-success/70 shrink-0"
+                          title="Conversar no WhatsApp"
+                        >
+                          <Phone className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between text-xs">
+                      <span className="font-bold text-foreground">
+                        {formatCurrency(opp.value || 0)}
+                      </span>
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        {opp.probability || 0}% prob.
+                      </span>
+                    </div>
+
+                    {opp.expectedCloseDate && (
+                      <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        <span>Fechamento: {opp.expectedCloseDate}</span>
+                      </div>
+                    )}
+
+                    {opp.items && opp.items.length > 0 && (
+                      <div className="mt-2 text-[11px] text-accent flex items-center gap-1">
+                        <Package className="h-3 w-3" />
+                        <span>{opp.items.length} produto(s) vinculado(s)</span>
+                      </div>
+                    )}
+
+                    {/* Quick actions */}
+                    <div className="mt-3 pt-2.5 border-t border-border flex items-center justify-between gap-1 text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        {stageIndex > 0 && (
+                          <button
+                            onClick={() =>
+                              onMoveStage(opp, PIPELINE_STAGES[stageIndex - 1].id)
+                            }
+                            title="Voltar etapa"
+                            className="p-1 hover:text-accent transition-colors"
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {stageItem.id !== "won" &&
+                          stageItem.id !== "lost" &&
+                          stageIndex < PIPELINE_STAGES.length - 2 && (
+                            <button
+                              onClick={() =>
+                                onMoveStage(opp, PIPELINE_STAGES[stageIndex + 1].id)
+                              }
+                              title="Avançar etapa"
+                              className="p-1 hover:text-accent transition-colors"
+                            >
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => onEdit(opp)}
+                          title="Editar"
+                          className="p-1 hover:text-accent transition-colors"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onDelete(opp)}
+                          title="Excluir"
+                          className="p-1 hover:text-danger transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </motion.div>
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function PipelinePage() {
   const toast = useToast();
   const {
@@ -120,9 +304,9 @@ export function PipelinePage() {
   const [lossReason, setLossReason] = useState("");
   const [dealItems, setDealItems] = useState<OpportunityItem[]>([]);
 
-  // ── Ações ──
+  // ── Ações (estáveis: não quebram o React.memo do board) ──
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditingOpp(null);
     setTitle("");
     setSelectedClientId("");
@@ -139,9 +323,9 @@ export function PipelinePage() {
     setDealItems([]);
     setActionError(null);
     setModalOpen(true);
-  };
+  }, []);
 
-  const openEdit = (opp: PipelineOpp) => {
+  const openEdit = useCallback((opp: PipelineOpp) => {
     setEditingOpp(opp);
     setTitle(opp.title);
     setSelectedClientId(opp.clientId || "");
@@ -165,7 +349,7 @@ export function PipelinePage() {
     );
     setActionError(null);
     setModalOpen(true);
-  };
+  }, []);
 
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
@@ -254,31 +438,37 @@ export function PipelinePage() {
     }
   };
 
-  const handleMoveStage = async (opp: PipelineOpp, newStage: PipelineStage) => {
-    try {
-      const updatedProb = STAGE_PROBABILITY[newStage];
-      await editItem(opp.id, {
-        stage: newStage,
-        ...(updatedProb !== null ? { probability: updatedProb } : {}),
-      });
-      const label = PIPELINE_STAGES.find((s) => s.id === newStage)?.label;
-      toast.success(`Movido para "${label}"`);
-    } catch (err: any) {
-      console.error("Erro ao mover oportunidade:", err);
-      toast.error("Erro ao mover oportunidade.");
-    }
-  };
+  const handleMoveStage = useCallback(
+    async (opp: PipelineOpp, newStage: PipelineStage) => {
+      try {
+        const updatedProb = STAGE_PROBABILITY[newStage];
+        await editItem(opp.id, {
+          stage: newStage,
+          ...(updatedProb !== null ? { probability: updatedProb } : {}),
+        });
+        const label = PIPELINE_STAGES.find((s) => s.id === newStage)?.label;
+        toast.success(`Movido para "${label}"`);
+      } catch (err: any) {
+        console.error("Erro ao mover oportunidade:", err);
+        toast.error("Erro ao mover oportunidade.");
+      }
+    },
+    [editItem, toast]
+  );
 
-  const handleDelete = async (opp: PipelineOpp) => {
-    if (!confirm("Tem certeza que deseja excluir esta oportunidade?")) return;
-    try {
-      await deleteItem(opp.id);
-      toast.success("Oportunidade removida.");
-    } catch (err: any) {
-      console.error("Erro ao excluir:", err);
-      toast.error("Erro ao excluir.");
-    }
-  };
+  const handleDelete = useCallback(
+    async (opp: PipelineOpp) => {
+      if (!confirm("Tem certeza que deseja excluir esta oportunidade?")) return;
+      try {
+        await deleteItem(opp.id);
+        toast.success("Oportunidade removida.");
+      } catch (err: any) {
+        console.error("Erro ao excluir:", err);
+        toast.error("Erro ao excluir.");
+      }
+    },
+    [deleteItem, toast]
+  );
 
   // ── Métricas ──
 
@@ -465,179 +655,12 @@ export function PipelinePage() {
           ))}
         </div>
       ) : (
-        <motion.div
-          variants={itemVariants}
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4"
-        >
-          {PIPELINE_STAGES.map((stageItem) => {
-            const stageOpps = filteredOpps.filter(
-              (o) => o.stage === stageItem.id
-            );
-            const stageTotal = stageOpps.reduce(
-              (sum, o) => sum + (o.value || 0),
-              0
-            );
-            const stageIndex = PIPELINE_STAGES.findIndex(
-              (s) => s.id === stageItem.id
-            );
-
-            return (
-              <div
-                key={stageItem.id}
-                className={cn(
-                  "flex flex-col rounded-2xl border bg-background p-3.5 min-h-[240px] 2xl:min-h-[480px]",
-                  stageItem.id === "won" && "border-success/40 bg-success-light/40",
-                  stageItem.id === "lost" && "border-danger/40 bg-danger-light/40"
-                )}
-              >
-                {/* Column header */}
-                <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
-                  <div>
-                    <h3 className={cn("font-bold text-sm", stageItem.accent)}>
-                      {stageItem.label}
-                    </h3>
-                    <span className="text-xs text-muted-foreground font-medium">
-                      {formatCurrency(stageTotal)}
-                    </span>
-                  </div>
-                  <Badge className={stageItem.chip}>{stageOpps.length}</Badge>
-                </div>
-
-                {/* Cards */}
-                <div className="flex-1 space-y-3 overflow-y-auto">
-                  {stageOpps.length === 0 ? (
-                    <div className="h-28 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl text-xs text-muted-foreground text-center px-4">
-                      Nenhuma oportunidade nesta etapa
-                    </div>
-                  ) : (
-                    stageOpps.map((opp) => (
-                      <div
-                        key={opp.id}
-                        className="rounded-xl border border-border bg-card p-3.5 shadow-xs hover:shadow-md transition-all"
-                      >
-                        <div className="flex justify-between items-start gap-2">
-                          <h4
-                            onClick={() => openEdit(opp)}
-                            className="font-bold text-sm text-foreground hover:text-accent cursor-pointer line-clamp-1"
-                          >
-                            {opp.title}
-                          </h4>
-                          <Badge
-                            variant={
-                              opp.priority === "high"
-                                ? "danger"
-                                : opp.priority === "medium"
-                                ? "warning"
-                                : "default"
-                            }
-                          >
-                            {opp.priority === "high"
-                              ? "Alta"
-                              : opp.priority === "medium"
-                              ? "Média"
-                              : "Baixa"}
-                          </Badge>
-                        </div>
-
-                        <div className="text-xs text-muted-foreground font-medium mt-1 flex items-center gap-1.5">
-                          <span className="truncate">{opp.clientName}</span>
-                          {opp.clientPhone && (
-                            <button
-                              onClick={() =>
-                                openExternalLink(
-                                  `https://wa.me/${opp.clientPhone!.replace(/\D/g, "")}`
-                                )
-                              }
-                              className="text-success hover:text-success/70 shrink-0"
-                              title="Conversar no WhatsApp"
-                            >
-                              <Phone className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between text-xs">
-                          <span className="font-bold text-foreground">
-                            {formatCurrency(opp.value || 0)}
-                          </span>
-                          <span className="text-[11px] font-semibold text-muted-foreground">
-                            {opp.probability || 0}% prob.
-                          </span>
-                        </div>
-
-                        {opp.expectedCloseDate && (
-                          <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>Fechamento: {opp.expectedCloseDate}</span>
-                          </div>
-                        )}
-
-                        {opp.items && opp.items.length > 0 && (
-                          <div className="mt-2 text-[11px] text-accent flex items-center gap-1">
-                            <Package className="h-3 w-3" />
-                            <span>{opp.items.length} produto(s) vinculado(s)</span>
-                          </div>
-                        )}
-
-                        {/* Quick actions */}
-                        <div className="mt-3 pt-2.5 border-t border-border flex items-center justify-between gap-1 text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            {stageIndex > 0 && (
-                              <button
-                                onClick={() =>
-                                  handleMoveStage(
-                                    opp,
-                                    PIPELINE_STAGES[stageIndex - 1].id
-                                  )
-                                }
-                                title="Voltar etapa"
-                                className="p-1 hover:text-accent transition-colors"
-                              >
-                                <ChevronLeft className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                            {stageItem.id !== "won" &&
-                              stageItem.id !== "lost" &&
-                              stageIndex < PIPELINE_STAGES.length - 2 && (
-                                <button
-                                  onClick={() =>
-                                    handleMoveStage(
-                                      opp,
-                                      PIPELINE_STAGES[stageIndex + 1].id
-                                    )
-                                  }
-                                  title="Avançar etapa"
-                                  className="p-1 hover:text-accent transition-colors"
-                                >
-                                  <ChevronRight className="h-3.5 w-3.5" />
-                                </button>
-                              )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => openEdit(opp)}
-                              title="Editar"
-                              className="p-1 hover:text-accent transition-colors"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(opp)}
-                              title="Excluir"
-                              className="p-1 hover:text-danger transition-colors"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </motion.div>
+        <PipelineBoard
+          opps={filteredOpps}
+          onEdit={openEdit}
+          onDelete={handleDelete}
+          onMoveStage={handleMoveStage}
+        />
       )}
 
       {/* Modal Nova / Editar Oportunidade */}

@@ -143,3 +143,20 @@ Work Log:
 - Correcao imediata (v2.10.0): renomeado o asset via API do GitHub para Nova-CRM-2.10.0.AppImage (mesmo nome do manifest); conteudo/sha512 inalterados
 - Bloco do blockmap do AppImage nao e fatal no electron-updater 6.8.9: falta dele apenas desabilita o download diferencial (fallback para download completo)
 - Correcao permanente: artifactName explicito "Nova-CRM-${version}.${ext}" no target AppImage do package.json (sem espaco, casa com o manifest em todos os proximos releases)
+---
+Task ID: 1
+Agent: Main Agent
+Task: Otimizar performance dos modais das abas novas (Pipeline, Propostas, Tarefas, Automações) e publicar v2.10.1
+
+Work Log:
+- Diagnóstico da travadinha ao abrir modais: ao abrir o modal, o componente inteiro da página re-renderizava — kanban inteiro (6 colunas + todos os cards), grade de propostas, lista de tarefas e grid de automações eram re-renderizados junto com o modal
+- Causa adicional: useFirebaseList criava o array "items" novo a cada render (referência instável), invalidando todos os useMemos das páginas
+- Correcao 1: "items" do useFirebaseList agora memoizado com useMemo([data]) — referencia estavel, so muda com snapshot novo do Firestore (beneficia todas as paginas do app)
+- Correcao 2: listas/boards extraidos em componentes React.memo (PipelineBoard, ProposalsGrid, TasksList, AutomationsGrid) — abrir/fechar modal ou digitar no formulario nao re-renderiza mais a lista
+- Correcao 3: todos os callbacks de acao (openEdit, handleDelete, handleMoveStage, handleToggleComplete, handleToggleActive, handleGeneratePDF, handleShareWhatsApp, handleConvertToOrder) estaveis com useCallback
+- Correcao 4: jsPDF agora e import dinamico (await import("jspdf")) — só carrega ao gerar o PDF; chunk principal encolheu 2213 kB -> 1813 kB (gzip 672 -> 540 kB)
+- Build validado (tsc -b + vite build OK), versao 2.10.0 -> 2.10.1
+
+Stage Summary:
+- v2.10.1: modais das abas novas abrem sem re-renderizar as listas (sem travadinha), bundle inicial ~19% menor
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.1

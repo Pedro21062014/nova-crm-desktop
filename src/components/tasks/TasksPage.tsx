@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar,
@@ -73,6 +73,152 @@ const itemVariants = {
 };
 
 type TabKey = "today" | "overdue" | "upcoming" | "all" | "completed";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lista memozizada: abrir o modal ou digitar no formulário não re-renderiza
+// as linhas de tarefa — apenas mudanças de dados no Firestore ou de filtro.
+// ─────────────────────────────────────────────────────────────────────────────
+interface TasksListProps {
+  tasks: TaskRec[];
+  todayStr: string;
+  onToggleComplete: (task: TaskRec) => void;
+  onEdit: (task: TaskRec) => void;
+  onDelete: (task: TaskRec) => void;
+}
+
+const TasksList = memo(function TasksList({
+  tasks,
+  todayStr,
+  onToggleComplete,
+  onEdit,
+  onDelete,
+}: TasksListProps) {
+  return (
+    <motion.div variants={containerVariants} className="space-y-3">
+      {tasks.map((task) => {
+        const taskTypeInfo =
+          TASK_TYPES.find((t) => t.id === task.type) || TASK_TYPES[6];
+        const Icon = taskTypeInfo.icon;
+        const isCompleted = task.status === "completed";
+        const isOverdue = !isCompleted && (task.dueDate || "") < todayStr;
+
+        return (
+          <motion.div key={task.id} variants={itemVariants}>
+            <Card
+              className={cn(
+                "flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3",
+                isCompleted && "opacity-60 bg-success-light/40 border-success/30",
+                isOverdue && "border-danger/40 bg-danger-light/30"
+              )}
+            >
+              <div className="flex w-full sm:w-auto items-center gap-3">
+                <button
+                  onClick={() => onToggleComplete(task)}
+                  className={cn(
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                    isCompleted
+                      ? "border-success bg-success text-white"
+                      : "border-border hover:border-accent"
+                  )}
+                >
+                  {isCompleted && <Check className="h-3.5 w-3.5" />}
+                </button>
+
+                <div
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                    taskTypeInfo.chip
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h4
+                    className={cn(
+                      "font-bold text-sm text-foreground",
+                      isCompleted && "line-through text-muted-foreground"
+                    )}
+                  >
+                    {task.title}
+                  </h4>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {task.clientName && (
+                      <span className="font-semibold text-foreground flex items-center gap-1">
+                        👤 {task.clientName}
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "flex items-center gap-1 font-medium",
+                        isOverdue && "font-bold text-danger"
+                      )}
+                    >
+                      <Calendar className="h-3 w-3" />
+                      {task.dueDate} {task.dueTime ? `às ${task.dueTime}` : ""}
+                      {isOverdue && " (Atrasada)"}
+                    </span>
+                    <Badge
+                      variant={
+                        task.priority === "high"
+                          ? "danger"
+                          : task.priority === "medium"
+                          ? "warning"
+                          : "default"
+                      }
+                    >
+                      {PRIORITY_LABEL[task.priority] || "Média"}
+                    </Badge>
+                  </div>
+                  {task.description && (
+                    <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                      {task.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                {task.clientPhone && (
+                  <button
+                    onClick={() =>
+                      openExternalLink(
+                        `https://wa.me/${task.clientPhone!.replace(/\D/g, "")}?text=${encodeURIComponent(
+                          `Olá ${task.clientName || ""}, tudo bem?`
+                        )}`
+                      )
+                    }
+                    className="flex items-center gap-1 rounded-xl bg-success-light p-2 text-xs font-bold text-success transition-colors hover:bg-success/20"
+                    title="Chamar no WhatsApp"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">WhatsApp</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => onEdit(task)}
+                  title="Editar"
+                  className="p-2 text-muted-foreground transition-colors hover:text-accent"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => onDelete(task)}
+                  title="Excluir"
+                  className="p-2 text-muted-foreground transition-colors hover:text-danger"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </Card>
+          </motion.div>
+        );
+      })}
+    </motion.div>
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function TasksPage() {
   const toast = useToast();
@@ -167,7 +313,7 @@ export function TasksPage() {
     return list.sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
   }, [activeTab, search, todayTasks, overdueTasks, upcomingTasks, completedTasks, tasks]);
 
-  // ── Ações ──
+  // ── Ações (estáveis para o React.memo da lista) ──
 
   const openCreate = () => {
     setEditingTask(null);
@@ -185,7 +331,7 @@ export function TasksPage() {
     setModalOpen(true);
   };
 
-  const openEdit = (task: TaskRec) => {
+  const openEdit = useCallback((task: TaskRec) => {
     setEditingTask(task);
     setTitle(task.title);
     setDescription(task.description || "");
@@ -199,7 +345,7 @@ export function TasksPage() {
     setSelectedOpportunityId(task.opportunityId || "");
     setActionError(null);
     setModalOpen(true);
-  };
+  }, []);
 
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
@@ -211,23 +357,26 @@ export function TasksPage() {
     }
   };
 
-  const handleToggleComplete = async (task: TaskRec) => {
-    const newStatus = task.status === "completed" ? "pending" : "completed";
-    try {
-      await editItem(task.id, {
-        status: newStatus,
-        completedAt: newStatus === "completed" ? Timestamp.now() : null,
-      });
-      if (newStatus === "completed") {
-        toast.success("Tarefa concluída!");
-      } else {
-        toast.info("Tarefa reaberta.");
+  const handleToggleComplete = useCallback(
+    async (task: TaskRec) => {
+      const newStatus = task.status === "completed" ? "pending" : "completed";
+      try {
+        await editItem(task.id, {
+          status: newStatus,
+          completedAt: newStatus === "completed" ? Timestamp.now() : null,
+        });
+        if (newStatus === "completed") {
+          toast.success("Tarefa concluída!");
+        } else {
+          toast.info("Tarefa reaberta.");
+        }
+      } catch (err: any) {
+        console.error("Erro ao atualizar tarefa:", err);
+        toast.error("Erro ao atualizar tarefa.");
       }
-    } catch (err: any) {
-      console.error("Erro ao atualizar tarefa:", err);
-      toast.error("Erro ao atualizar tarefa.");
-    }
-  };
+    },
+    [editItem, toast]
+  );
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -269,16 +418,19 @@ export function TasksPage() {
     }
   };
 
-  const handleDelete = async (task: TaskRec) => {
-    if (!confirm("Tem certeza que deseja excluir esta tarefa?")) return;
-    try {
-      await deleteItem(task.id);
-      toast.success("Tarefa removida.");
-    } catch (err: any) {
-      console.error("Erro ao excluir tarefa:", err);
-      toast.error("Erro ao excluir tarefa.");
-    }
-  };
+  const handleDelete = useCallback(
+    async (task: TaskRec) => {
+      if (!confirm("Tem certeza que deseja excluir esta tarefa?")) return;
+      try {
+        await deleteItem(task.id);
+        toast.success("Tarefa removida.");
+      } catch (err: any) {
+        console.error("Erro ao excluir tarefa:", err);
+        toast.error("Erro ao excluir tarefa.");
+      }
+    },
+    [deleteItem, toast]
+  );
 
   const TABS: { key: TabKey; label: string; count: number; color: string }[] = [
     { key: "today", label: "Hoje", count: todayTasks.length, color: "bg-accent text-white" },
@@ -406,127 +558,13 @@ export function TasksPage() {
           </Button>
         </div>
       ) : (
-        <motion.div variants={containerVariants} className="space-y-3">
-          {filteredTasks.map((task) => {
-            const taskTypeInfo =
-              TASK_TYPES.find((t) => t.id === task.type) || TASK_TYPES[6];
-            const Icon = taskTypeInfo.icon;
-            const isCompleted = task.status === "completed";
-            const isOverdue = !isCompleted && (task.dueDate || "") < todayStr;
-
-            return (
-              <motion.div key={task.id} variants={itemVariants}>
-                <Card
-                  className={cn(
-                    "flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3",
-                    isCompleted && "opacity-60 bg-success-light/40 border-success/30",
-                    isOverdue && "border-danger/40 bg-danger-light/30"
-                  )}
-                >
-                  <div className="flex w-full sm:w-auto items-center gap-3">
-                    <button
-                      onClick={() => handleToggleComplete(task)}
-                      className={cn(
-                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                        isCompleted
-                          ? "border-success bg-success text-white"
-                          : "border-border hover:border-accent"
-                      )}
-                    >
-                      {isCompleted && <Check className="h-3.5 w-3.5" />}
-                    </button>
-
-                    <div
-                      className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                        taskTypeInfo.chip
-                      )}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <h4
-                        className={cn(
-                          "font-bold text-sm text-foreground",
-                          isCompleted && "line-through text-muted-foreground"
-                        )}
-                      >
-                        {task.title}
-                      </h4>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        {task.clientName && (
-                          <span className="font-semibold text-foreground flex items-center gap-1">
-                            👤 {task.clientName}
-                          </span>
-                        )}
-                        <span
-                          className={cn(
-                            "flex items-center gap-1 font-medium",
-                            isOverdue && "font-bold text-danger"
-                          )}
-                        >
-                          <Calendar className="h-3 w-3" />
-                          {task.dueDate} {task.dueTime ? `às ${task.dueTime}` : ""}
-                          {isOverdue && " (Atrasada)"}
-                        </span>
-                        <Badge
-                          variant={
-                            task.priority === "high"
-                              ? "danger"
-                              : task.priority === "medium"
-                              ? "warning"
-                              : "default"
-                          }
-                        >
-                          {PRIORITY_LABEL[task.priority] || "Média"}
-                        </Badge>
-                      </div>
-                      {task.description && (
-                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
-                          {task.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-end sm:self-center">
-                    {task.clientPhone && (
-                      <button
-                        onClick={() =>
-                          openExternalLink(
-                            `https://wa.me/${task.clientPhone!.replace(/\D/g, "")}?text=${encodeURIComponent(
-                              `Olá ${task.clientName || ""}, tudo bem?`
-                            )}`
-                          )
-                        }
-                        className="flex items-center gap-1 rounded-xl bg-success-light p-2 text-xs font-bold text-success transition-colors hover:bg-success/20"
-                        title="Chamar no WhatsApp"
-                      >
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">WhatsApp</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => openEdit(task)}
-                      title="Editar"
-                      className="p-2 text-muted-foreground transition-colors hover:text-accent"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(task)}
-                      title="Excluir"
-                      className="p-2 text-muted-foreground transition-colors hover:text-danger"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </motion.div>
+        <TasksList
+          tasks={filteredTasks}
+          todayStr={todayStr}
+          onToggleComplete={handleToggleComplete}
+          onEdit={openEdit}
+          onDelete={handleDelete}
+        />
       )}
 
       {/* Modal Criar / Editar Tarefa */}

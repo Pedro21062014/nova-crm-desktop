@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import { motion } from "framer-motion";
 import {
   Zap,
@@ -114,6 +114,128 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Grade memozizada: abrir o modal ou digitar no formulário não re-renderiza
+// os cards de automação — apenas mudanças de dados no Firestore.
+// ─────────────────────────────────────────────────────────────────────────────
+interface AutomationsGridProps {
+  automations: AutomationRec[];
+  onToggle: (auto: AutomationRec) => void;
+  onEdit: (auto: AutomationRec) => void;
+  onDelete: (auto: AutomationRec) => void;
+}
+
+const AutomationsGrid = memo(function AutomationsGrid({
+  automations,
+  onToggle,
+  onEdit,
+  onDelete,
+}: AutomationsGridProps) {
+  return (
+    <motion.div
+      variants={containerVariants}
+      className="grid grid-cols-1 md:grid-cols-2 gap-5"
+    >
+      {automations.map((auto) => {
+        const trigInfo = TRIGGER_INFO[auto.trigger] || TRIGGER_INFO.client_created;
+        const TrigIcon = trigInfo.icon;
+
+        return (
+          <motion.div key={auto.id} variants={itemVariants}>
+            <Card
+              className={cn(
+                "flex h-full flex-col justify-between",
+                !auto.isActive && "opacity-60"
+              )}
+            >
+              <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                        trigInfo.chip
+                      )}
+                    >
+                      <TrigIcon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-foreground">
+                        {auto.name}
+                      </h3>
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        Gatilho: {trigInfo.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Toggle */}
+                  <button
+                    onClick={() => onToggle(auto)}
+                    className={cn(
+                      "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                      auto.isActive ? "bg-accent" : "bg-muted"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
+                        auto.isActive ? "translate-x-6" : "translate-x-1"
+                      )}
+                    />
+                  </button>
+                </div>
+
+                {auto.description && (
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                    {auto.description}
+                  </p>
+                )}
+
+                {/* Flow visualizer */}
+                <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-muted/50 p-3 text-xs">
+                  <span className="font-medium text-foreground flex items-center gap-1.5">
+                    ⚡ {trigInfo.label}
+                  </span>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-bold text-accent">
+                    {auto.actionType === "add_notification"
+                      ? "🔔 Notificação"
+                      : `✅ Criar Tarefa (${auto.actionConfig?.delayDays ?? 0}d)`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
+                <span>Executado {auto.executionsCount || 0} vez(es)</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onEdit(auto)}
+                    title="Editar"
+                    className="p-1.5 transition-colors hover:text-accent"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(auto)}
+                    title="Excluir"
+                    className="p-1.5 transition-colors hover:text-danger"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        );
+      })}
+    </motion.div>
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function AutomationsPage() {
   const toast = useToast();
   const {
@@ -169,18 +291,21 @@ export function AutomationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, automations.length]);
 
-  // ── Ações ──
+  // ── Ações (estáveis para o React.memo da grade) ──
 
-  const handleToggleActive = async (auto: AutomationRec) => {
-    try {
-      const newActive = !auto.isActive;
-      await editItem(auto.id, { isActive: newActive });
-      toast.success(newActive ? "Automação ativada!" : "Automação pausada.");
-    } catch (err: any) {
-      console.error("Erro ao atualizar status:", err);
-      toast.error("Erro ao atualizar status.");
-    }
-  };
+  const handleToggleActive = useCallback(
+    async (auto: AutomationRec) => {
+      try {
+        const newActive = !auto.isActive;
+        await editItem(auto.id, { isActive: newActive });
+        toast.success(newActive ? "Automação ativada!" : "Automação pausada.");
+      } catch (err: any) {
+        console.error("Erro ao atualizar status:", err);
+        toast.error("Erro ao atualizar status.");
+      }
+    },
+    [editItem, toast]
+  );
 
   const openCreate = () => {
     setEditingAuto(null);
@@ -194,7 +319,7 @@ export function AutomationsPage() {
     setModalOpen(true);
   };
 
-  const openEdit = (auto: AutomationRec) => {
+  const openEdit = useCallback((auto: AutomationRec) => {
     setEditingAuto(auto);
     setName(auto.name);
     setDescription(auto.description || "");
@@ -204,7 +329,7 @@ export function AutomationsPage() {
     setDelayDays(Number(auto.actionConfig?.delayDays ?? 1));
     setActionError(null);
     setModalOpen(true);
-  };
+  }, []);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -245,16 +370,19 @@ export function AutomationsPage() {
     }
   };
 
-  const handleDelete = async (auto: AutomationRec) => {
-    if (!confirm("Tem certeza que deseja excluir esta automação?")) return;
-    try {
-      await deleteItem(auto.id);
-      toast.success("Automação excluída.");
-    } catch (err: any) {
-      console.error("Erro ao excluir:", err);
-      toast.error("Erro ao excluir.");
-    }
-  };
+  const handleDelete = useCallback(
+    async (auto: AutomationRec) => {
+      if (!confirm("Tem certeza que deseja excluir esta automação?")) return;
+      try {
+        await deleteItem(auto.id);
+        toast.success("Automação excluída.");
+      } catch (err: any) {
+        console.error("Erro ao excluir:", err);
+        toast.error("Erro ao excluir.");
+      }
+    },
+    [deleteItem, toast]
+  );
 
   const sorted = useMemo(
     () =>
@@ -349,107 +477,12 @@ export function AutomationsPage() {
           </Button>
         </div>
       ) : (
-        <motion.div
-          variants={containerVariants}
-          className="grid grid-cols-1 md:grid-cols-2 gap-5"
-        >
-          {sorted.map((auto) => {
-            const trigInfo = TRIGGER_INFO[auto.trigger] || TRIGGER_INFO.client_created;
-            const TrigIcon = trigInfo.icon;
-
-            return (
-              <motion.div key={auto.id} variants={itemVariants}>
-                <Card
-                  className={cn(
-                    "flex h-full flex-col justify-between",
-                    !auto.isActive && "opacity-60"
-                  )}
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className={cn(
-                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                            trigInfo.chip
-                          )}
-                        >
-                          <TrigIcon className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-sm text-foreground">
-                            {auto.name}
-                          </h3>
-                          <span className="text-[11px] font-semibold text-muted-foreground">
-                            Gatilho: {trigInfo.label}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Toggle */}
-                      <button
-                        onClick={() => handleToggleActive(auto)}
-                        className={cn(
-                          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-                          auto.isActive ? "bg-accent" : "bg-muted"
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
-                            auto.isActive ? "translate-x-6" : "translate-x-1"
-                          )}
-                        />
-                      </button>
-                    </div>
-
-                    {auto.description && (
-                      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                        {auto.description}
-                      </p>
-                    )}
-
-                    {/* Flow visualizer */}
-                    <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-muted/50 p-3 text-xs">
-                      <span className="font-medium text-foreground flex items-center gap-1.5">
-                        ⚡ {trigInfo.label}
-                      </span>
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="font-bold text-accent">
-                        {auto.actionType === "add_notification"
-                          ? "🔔 Notificação"
-                          : `✅ Criar Tarefa (${auto.actionConfig?.delayDays ?? 0}d)`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
-                    <span>
-                      Executado {auto.executionsCount || 0} vez(es)
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEdit(auto)}
-                        title="Editar"
-                        className="p-1.5 transition-colors hover:text-accent"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(auto)}
-                        title="Excluir"
-                        className="p-1.5 transition-colors hover:text-danger"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </motion.div>
+        <AutomationsGrid
+          automations={sorted}
+          onToggle={handleToggleActive}
+          onEdit={openEdit}
+          onDelete={handleDelete}
+        />
       )}
 
       {/* Modal Criar / Editar Automação */}

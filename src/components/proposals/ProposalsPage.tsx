@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -12,7 +12,6 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-import { jsPDF } from "jspdf";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import {
   useProposals,
@@ -25,7 +24,7 @@ import {
   type ProposalItem,
   type ProposalStatus,
 } from "@/services/firebase";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import {
   sanitizeFirestoreData,
   getClientName,
@@ -77,6 +76,124 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Grade memozizada: abrir o modal ou digitar no formulário não re-renderiza
+// os cards de proposta — apenas mudanças de dados no Firestore.
+// ─────────────────────────────────────────────────────────────────────────────
+interface ProposalsGridProps {
+  propsList: ProposalRec[];
+  onGeneratePDF: (prop: ProposalRec) => void;
+  onShareWhatsApp: (prop: ProposalRec) => void;
+  onConvertToOrder: (prop: ProposalRec) => void;
+  onEdit: (prop: ProposalRec) => void;
+  onDelete: (prop: ProposalRec) => void;
+}
+
+const ProposalsGrid = memo(function ProposalsGrid({
+  propsList,
+  onGeneratePDF,
+  onShareWhatsApp,
+  onConvertToOrder,
+  onEdit,
+  onDelete,
+}: ProposalsGridProps) {
+  return (
+    <motion.div
+      variants={containerVariants}
+      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+    >
+      {propsList.map((prop) => (
+        <motion.div key={prop.id} variants={itemVariants}>
+          <Card hover className="flex h-full flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-black text-accent bg-accent-light px-2 py-0.5 rounded-md">
+                  {prop.proposalNumber}
+                </span>
+                <Badge variant={STATUS_VARIANT[prop.status] || "default"}>
+                  {STATUS_LABEL[prop.status] || prop.status}
+                </Badge>
+              </div>
+
+              <h3 className="font-bold text-base text-foreground mt-3 line-clamp-1">
+                {prop.title}
+              </h3>
+              <p className="text-xs font-medium text-muted-foreground mt-1">
+                Cliente:{" "}
+                <span className="font-bold text-foreground">
+                  {prop.clientName}
+                </span>
+              </p>
+
+              <div className="mt-4 rounded-xl border border-border bg-muted/50 p-3">
+                <div className="flex justify-between items-center text-xs text-muted-foreground">
+                  <span>{prop.items?.length || 0} item(ns) na proposta</span>
+                  <span>Válida até {prop.validUntil || "A combinar"}</span>
+                </div>
+                <div className="mt-2 flex items-baseline justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    Valor Total:
+                  </span>
+                  <span className="text-lg font-bold text-foreground">
+                    {formatCurrency(prop.total || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onGeneratePDF(prop)}
+                  title="Baixar PDF"
+                  className="p-2 text-muted-foreground hover:text-accent hover:bg-accent-light rounded-lg transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => onShareWhatsApp(prop)}
+                  title="Enviar WhatsApp"
+                  className="p-2 text-muted-foreground hover:text-success hover:bg-success-light rounded-lg transition-colors"
+                >
+                  <Share2 className="h-4 w-4" />
+                </button>
+                {prop.status !== "approved" && (
+                  <button
+                    onClick={() => onConvertToOrder(prop)}
+                    title="Converter em Pedido"
+                    className="p-2 text-muted-foreground hover:text-warning hover:bg-warning-light rounded-lg transition-colors"
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onEdit(prop)}
+                  title="Editar"
+                  className="p-2 text-muted-foreground hover:text-accent rounded-lg transition-colors"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => onDelete(prop)}
+                  title="Excluir"
+                  className="p-2 text-muted-foreground hover:text-danger rounded-lg transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function ProposalsPage() {
   const toast = useToast();
   const {
@@ -122,7 +239,7 @@ export function ProposalsPage() {
   );
   const [status, setStatus] = useState<ProposalStatus>("draft");
 
-  // ── Ações ──
+  // ── Ações (estáveis para o React.memo da grade) ──
 
   const openCreate = () => {
     setEditingProp(null);
@@ -147,7 +264,7 @@ export function ProposalsPage() {
     setModalOpen(true);
   };
 
-  const openEdit = (prop: ProposalRec) => {
+  const openEdit = useCallback((prop: ProposalRec) => {
     setEditingProp(prop);
     setProposalNumber(prop.proposalNumber);
     setTitle(prop.title);
@@ -165,7 +282,7 @@ export function ProposalsPage() {
     setStatus(prop.status || "draft");
     setActionError(null);
     setModalOpen(true);
-  };
+  }, []);
 
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
@@ -287,303 +404,299 @@ export function ProposalsPage() {
     }
   };
 
-  const handleDelete = async (prop: ProposalRec) => {
-    if (!confirm("Deseja realmente excluir esta proposta?")) return;
-    try {
-      await deleteItem(prop.id);
-      toast.success("Proposta excluída.");
-    } catch (err: any) {
-      console.error("Erro ao excluir:", err);
-      toast.error("Erro ao excluir.");
-    }
-  };
-
-  // ── PDF (mesma geração do CRM web, via jsPDF) ──
-
-  const handleGeneratePDF = (prop: ProposalRec) => {
-    try {
-      const docPdf = new jsPDF({ unit: "pt", format: "a4" });
-      const pageWidth = docPdf.internal.pageSize.getWidth();
-      const margin = 40;
-      let y = 50;
-
-      const companyName =
-        (config as any)?.storeName || (config as any)?.nomeLoja || "Nova CRM";
-
-      docPdf.setFont("helvetica", "bold");
-      docPdf.setFontSize(20);
-      docPdf.setTextColor(30, 41, 59);
-      docPdf.text(companyName, margin, y);
-
-      docPdf.setFontSize(10);
-      docPdf.setFont("helvetica", "normal");
-      docPdf.setTextColor(100, 116, 139);
-      y += 18;
-      docPdf.text("PROPOSTA COMERCIAL & ORÇAMENTO", margin, y);
-
-      docPdf.setFont("helvetica", "bold");
-      docPdf.setTextColor(79, 70, 229);
-      docPdf.text(
-        prop.proposalNumber,
-        pageWidth - margin,
-        50,
-        { align: "right" }
-      );
-      docPdf.setFont("helvetica", "normal");
-      docPdf.setTextColor(100, 116, 139);
-      docPdf.text(
-        `Válida até: ${prop.validUntil || "A combinar"}`,
-        pageWidth - margin,
-        68,
-        { align: "right" }
-      );
-
-      y += 15;
-      docPdf.setDrawColor(226, 232, 240);
-      docPdf.setLineWidth(1);
-      docPdf.line(margin, y, pageWidth - margin, y);
-      y += 25;
-
-      // Client info box
-      docPdf.setFillColor(248, 250, 252);
-      docPdf.roundedRect(margin, y, pageWidth - margin * 2, 85, 6, 6, "F");
-      docPdf.setFont("helvetica", "bold");
-      docPdf.setFontSize(11);
-      docPdf.setTextColor(15, 23, 42);
-      docPdf.text("CLIENTE / DESTINATÁRIO:", margin + 15, y + 20);
-      docPdf.setFont("helvetica", "normal");
-      docPdf.setFontSize(10);
-      docPdf.setTextColor(51, 65, 85);
-      docPdf.text(`Nome: ${prop.clientName}`, margin + 15, y + 36);
-      if (prop.clientDocument)
-        docPdf.text(`CPF/CNPJ: ${prop.clientDocument}`, margin + 15, y + 50);
-      if (prop.clientEmail || prop.clientPhone) {
-        docPdf.text(
-          `Contato: ${prop.clientEmail || ""} ${
-            prop.clientPhone ? `| ${prop.clientPhone}` : ""
-          }`,
-          margin + 15,
-          y + 64
-        );
+  const handleDelete = useCallback(
+    async (prop: ProposalRec) => {
+      if (!confirm("Deseja realmente excluir esta proposta?")) return;
+      try {
+        await deleteItem(prop.id);
+        toast.success("Proposta excluída.");
+      } catch (err: any) {
+        console.error("Erro ao excluir:", err);
+        toast.error("Erro ao excluir.");
       }
+    },
+    [deleteItem, toast]
+  );
 
-      y += 110;
-      docPdf.setFont("helvetica", "bold");
-      docPdf.setFontSize(13);
-      docPdf.setTextColor(15, 23, 42);
-      docPdf.text(prop.title, margin, y);
-      y += 20;
+  // ── PDF (jsPDF carregado sob demanda, só ao gerar o PDF) ──
 
-      // Table header
-      docPdf.setFillColor(241, 245, 249);
-      docPdf.rect(margin, y, pageWidth - margin * 2, 24, "F");
-      docPdf.setFont("helvetica", "bold");
-      docPdf.setFontSize(9);
-      docPdf.setTextColor(71, 85, 105);
-      docPdf.text("ITEM / DESCRIÇÃO", margin + 10, y + 15);
-      docPdf.text("QTD", pageWidth - margin - 200, y + 15, {
-        align: "center",
-      });
-      docPdf.text("UNITÁRIO", pageWidth - margin - 120, y + 15, {
-        align: "right",
-      });
-      docPdf.text("TOTAL", pageWidth - margin - 10, y + 15, {
-        align: "right",
-      });
-      y += 24;
+  const handleGeneratePDF = useCallback(
+    async (prop: ProposalRec) => {
+      try {
+        const { jsPDF } = await import("jspdf");
+        const docPdf = new jsPDF({ unit: "pt", format: "a4" });
+        const pageWidth = docPdf.internal.pageSize.getWidth();
+        const margin = 40;
+        let y = 50;
 
-      docPdf.setFont("helvetica", "normal");
-      docPdf.setFontSize(9);
-      docPdf.setTextColor(51, 65, 85);
-      prop.items.forEach((item, index) => {
-        const rowBg = index % 2 === 0 ? 255 : 250;
-        docPdf.setFillColor(rowBg, rowBg, rowBg);
-        docPdf.rect(margin, y, pageWidth - margin * 2, 22, "F");
-        docPdf.text(item.name.substring(0, 45), margin + 10, y + 14);
-        docPdf.text(String(item.quantity), pageWidth - margin - 200, y + 14, {
+        const companyName =
+          (config as any)?.storeName ||
+          (config as any)?.nomeLoja ||
+          "Nova CRM";
+
+        docPdf.setFont("helvetica", "bold");
+        docPdf.setFontSize(20);
+        docPdf.setTextColor(30, 41, 59);
+        docPdf.text(companyName, margin, y);
+
+        docPdf.setFontSize(10);
+        docPdf.setFont("helvetica", "normal");
+        docPdf.setTextColor(100, 116, 139);
+        y += 18;
+        docPdf.text("PROPOSTA COMERCIAL & ORÇAMENTO", margin, y);
+
+        docPdf.setFont("helvetica", "bold");
+        docPdf.setTextColor(79, 70, 229);
+        docPdf.text(prop.proposalNumber, pageWidth - margin, 50, {
+          align: "right",
+        });
+        docPdf.setFont("helvetica", "normal");
+        docPdf.setTextColor(100, 116, 139);
+        docPdf.text(`Válida até: ${prop.validUntil || "A combinar"}`, pageWidth - margin, 68, {
+          align: "right",
+        });
+
+        y += 15;
+        docPdf.setDrawColor(226, 232, 240);
+        docPdf.setLineWidth(1);
+        docPdf.line(margin, y, pageWidth - margin, y);
+        y += 25;
+
+        // Client info box
+        docPdf.setFillColor(248, 250, 252);
+        docPdf.roundedRect(margin, y, pageWidth - margin * 2, 85, 6, 6, "F");
+        docPdf.setFont("helvetica", "bold");
+        docPdf.setFontSize(11);
+        docPdf.setTextColor(15, 23, 42);
+        docPdf.text("CLIENTE / DESTINATÁRIO:", margin + 15, y + 20);
+        docPdf.setFont("helvetica", "normal");
+        docPdf.setFontSize(10);
+        docPdf.setTextColor(51, 65, 85);
+        docPdf.text(`Nome: ${prop.clientName}`, margin + 15, y + 36);
+        if (prop.clientDocument)
+          docPdf.text(`CPF/CNPJ: ${prop.clientDocument}`, margin + 15, y + 50);
+        if (prop.clientEmail || prop.clientPhone) {
+          docPdf.text(
+            `Contato: ${prop.clientEmail || ""} ${
+              prop.clientPhone ? `| ${prop.clientPhone}` : ""
+            }`,
+            margin + 15,
+            y + 64
+          );
+        }
+
+        y += 110;
+        docPdf.setFont("helvetica", "bold");
+        docPdf.setFontSize(13);
+        docPdf.setTextColor(15, 23, 42);
+        docPdf.text(prop.title, margin, y);
+        y += 20;
+
+        // Table header
+        docPdf.setFillColor(241, 245, 249);
+        docPdf.rect(margin, y, pageWidth - margin * 2, 24, "F");
+        docPdf.setFont("helvetica", "bold");
+        docPdf.setFontSize(9);
+        docPdf.setTextColor(71, 85, 105);
+        docPdf.text("ITEM / DESCRIÇÃO", margin + 10, y + 15);
+        docPdf.text("QTD", pageWidth - margin - 200, y + 15, { align: "center" });
+        docPdf.text("UNITÁRIO", pageWidth - margin - 120, y + 15, { align: "right" });
+        docPdf.text("TOTAL", pageWidth - margin - 10, y + 15, { align: "right" });
+        y += 24;
+
+        docPdf.setFont("helvetica", "normal");
+        docPdf.setFontSize(9);
+        docPdf.setTextColor(51, 65, 85);
+        prop.items.forEach((item, index) => {
+          const rowBg = index % 2 === 0 ? 255 : 250;
+          docPdf.setFillColor(rowBg, rowBg, rowBg);
+          docPdf.rect(margin, y, pageWidth - margin * 2, 22, "F");
+          docPdf.text(item.name.substring(0, 45), margin + 10, y + 14);
+          docPdf.text(String(item.quantity), pageWidth - margin - 200, y + 14, {
+            align: "center",
+          });
+          docPdf.text(
+            (item.unitPrice || 0).toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            }),
+            pageWidth - margin - 120,
+            y + 14,
+            { align: "right" }
+          );
+          docPdf.text(
+            (item.total || 0).toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            }),
+            pageWidth - margin - 10,
+            y + 14,
+            { align: "right" }
+          );
+          y += 22;
+        });
+
+        // Totals box
+        y += 15;
+        const totalBoxX = pageWidth - margin - 220;
+        docPdf.setFillColor(248, 250, 252);
+        docPdf.roundedRect(totalBoxX, y, 220, 70, 6, 6, "F");
+        docPdf.setFont("helvetica", "normal");
+        docPdf.setFontSize(9);
+        docPdf.setTextColor(51, 65, 85);
+        docPdf.text("Subtotal:", totalBoxX + 15, y + 20);
+        docPdf.text(
+          (prop.subtotal || 0).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }),
+          totalBoxX + 205,
+          y + 20,
+          { align: "right" }
+        );
+        if ((prop.discount || 0) > 0) {
+          docPdf.setTextColor(225, 29, 72);
+          docPdf.text("Desconto Especial:", totalBoxX + 15, y + 36);
+          docPdf.text(
+            `- ${(prop.discount || 0).toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            })}`,
+            totalBoxX + 205,
+            y + 36,
+            { align: "right" }
+          );
+          docPdf.setTextColor(51, 65, 85);
+        }
+        docPdf.setFont("helvetica", "bold");
+        docPdf.setFontSize(11);
+        docPdf.setTextColor(79, 70, 229);
+        docPdf.text("VALOR TOTAL:", totalBoxX + 15, y + 56);
+        docPdf.text(
+          (prop.total || 0).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }),
+          totalBoxX + 205,
+          y + 56,
+          { align: "right" }
+        );
+        y += 90;
+
+        // Payment terms & notes
+        docPdf.setFont("helvetica", "bold");
+        docPdf.setFontSize(10);
+        docPdf.setTextColor(15, 23, 42);
+        docPdf.text("CONDIÇÕES DE PAGAMENTO & OBSERVAÇÕES", margin, y);
+        y += 16;
+        docPdf.setFont("helvetica", "normal");
+        docPdf.setFontSize(9);
+        docPdf.setTextColor(71, 85, 105);
+        docPdf.text(`Condições: ${prop.paymentTerms}`, margin, y);
+        y += 14;
+        if (prop.notes) {
+          const splitNotes = docPdf.splitTextToSize(
+            `Observações: ${prop.notes}`,
+            pageWidth - margin * 2
+          );
+          docPdf.text(splitNotes, margin, y);
+          y += splitNotes.length * 12;
+        }
+
+        // Signatures
+        y += 40;
+        docPdf.setDrawColor(203, 213, 225);
+        docPdf.line(margin, y, margin + 200, y);
+        docPdf.line(pageWidth - margin - 200, y, pageWidth - margin, y);
+        y += 14;
+        docPdf.setFontSize(8);
+        docPdf.text(companyName, margin + 100, y, { align: "center" });
+        docPdf.text(prop.clientName, pageWidth - margin - 100, y, {
           align: "center",
         });
-        docPdf.text(
-          (item.unitPrice || 0).toLocaleString("pt-BR", {
-            style: "currency",
-            currency: "BRL",
-          }),
-          pageWidth - margin - 120,
-          y + 14,
-          { align: "right" }
-        );
-        docPdf.text(
-          (item.total || 0).toLocaleString("pt-BR", {
-            style: "currency",
-            currency: "BRL",
-          }),
-          pageWidth - margin - 10,
-          y + 14,
-          { align: "right" }
-        );
-        y += 22;
-      });
 
-      // Totals box
-      y += 15;
-      const totalBoxX = pageWidth - margin - 220;
-      docPdf.setFillColor(248, 250, 252);
-      docPdf.roundedRect(totalBoxX, y, 220, 70, 6, 6, "F");
-      docPdf.setFont("helvetica", "normal");
-      docPdf.setFontSize(9);
-      docPdf.setTextColor(51, 65, 85);
-      docPdf.text("Subtotal:", totalBoxX + 15, y + 20);
-      docPdf.text(
-        (prop.subtotal || 0).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        }),
-        totalBoxX + 205,
-        y + 20,
-        { align: "right" }
-      );
-      if ((prop.discount || 0) > 0) {
-        docPdf.setTextColor(225, 29, 72);
-        docPdf.text("Desconto Especial:", totalBoxX + 15, y + 36);
-        docPdf.text(
-          `- ${(prop.discount || 0).toLocaleString("pt-BR", {
-            style: "currency",
-            currency: "BRL",
-          })}`,
-          totalBoxX + 205,
-          y + 36,
-          { align: "right" }
-        );
-        docPdf.setTextColor(51, 65, 85);
+        docPdf.save(`${prop.proposalNumber}_${prop.clientName.replace(/\s+/g, "_")}.pdf`);
+        toast.success("PDF da Proposta gerado e baixado com sucesso!");
+      } catch (err) {
+        console.error("Error generating PDF:", err);
+        toast.error("Erro ao gerar PDF da proposta.");
       }
-      docPdf.setFont("helvetica", "bold");
-      docPdf.setFontSize(11);
-      docPdf.setTextColor(79, 70, 229);
-      docPdf.text("VALOR TOTAL:", totalBoxX + 15, y + 56);
-      docPdf.text(
-        (prop.total || 0).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        }),
-        totalBoxX + 205,
-        y + 56,
-        { align: "right" }
-      );
-      y += 90;
-
-      // Payment terms & notes
-      docPdf.setFont("helvetica", "bold");
-      docPdf.setFontSize(10);
-      docPdf.setTextColor(15, 23, 42);
-      docPdf.text("CONDIÇÕES DE PAGAMENTO & OBSERVAÇÕES", margin, y);
-      y += 16;
-      docPdf.setFont("helvetica", "normal");
-      docPdf.setFontSize(9);
-      docPdf.setTextColor(71, 85, 105);
-      docPdf.text(`Condições: ${prop.paymentTerms}`, margin, y);
-      y += 14;
-      if (prop.notes) {
-        const splitNotes = docPdf.splitTextToSize(
-          `Observações: ${prop.notes}`,
-          pageWidth - margin * 2
-        );
-        docPdf.text(splitNotes, margin, y);
-        y += splitNotes.length * 12;
-      }
-
-      // Signatures
-      y += 40;
-      docPdf.setDrawColor(203, 213, 225);
-      docPdf.line(margin, y, margin + 200, y);
-      docPdf.line(pageWidth - margin - 200, y, pageWidth - margin, y);
-      y += 14;
-      docPdf.setFontSize(8);
-      docPdf.text(companyName, margin + 100, y, { align: "center" });
-      docPdf.text(prop.clientName, pageWidth - margin - 100, y, {
-        align: "center",
-      });
-
-      docPdf.save(`${prop.proposalNumber}_${prop.clientName.replace(/\s+/g, "_")}.pdf`);
-      toast.success("PDF da Proposta gerado e baixado com sucesso!");
-    } catch (err) {
-      console.error("Error generating PDF:", err);
-      toast.error("Erro ao gerar PDF da proposta.");
-    }
-  };
+    },
+    [config, toast]
+  );
 
   // ── WhatsApp share ──
 
-  const handleShareWhatsApp = (prop: ProposalRec) => {
-    if (!prop.clientPhone) {
-      toast.error("O cliente não possui telefone cadastrado.");
-      return;
-    }
-    const cleanPhone = prop.clientPhone.replace(/\D/g, "");
-    const itemsText = prop.items
-      .map(
-        (i) =>
-          `• ${i.quantity}x ${i.name} - ${formatCurrency(i.total || 0)}`
-      )
-      .join("\n");
+  const handleShareWhatsApp = useCallback(
+    (prop: ProposalRec) => {
+      if (!prop.clientPhone) {
+        toast.error("O cliente não possui telefone cadastrado.");
+        return;
+      }
+      const cleanPhone = prop.clientPhone.replace(/\D/g, "");
+      const itemsText = prop.items
+        .map((i) => `• ${i.quantity}x ${i.name} - ${formatCurrency(i.total || 0)}`)
+        .join("\n");
 
-    const message = `Olá *${prop.clientName}*! Tudo bem?\n\nSegue o resumo da sua Proposta Comercial (*${prop.proposalNumber}*):\n\n*${prop.title}*\n\n${itemsText}\n\n*Subtotal:* ${formatCurrency(
-      prop.subtotal || 0
-    )}\n${
-      (prop.discount || 0) > 0
-        ? `*Desconto:* -${formatCurrency(prop.discount)}\n`
-        : ""
-    }*VALOR TOTAL:* ${formatCurrency(
-      prop.total || 0
-    )}\n*Validade:* ${
-      prop.validUntil || "15 dias"
-    }\n*Condições:* ${prop.paymentTerms}\n\nFicamos à disposição para fecharmos o pedido! 🚀`;
+      const message = `Olá *${prop.clientName}*! Tudo bem?\n\nSegue o resumo da sua Proposta Comercial (*${prop.proposalNumber}*):\n\n*${prop.title}*\n\n${itemsText}\n\n*Subtotal:* ${formatCurrency(
+        prop.subtotal || 0
+      )}\n${
+        (prop.discount || 0) > 0 ? `*Desconto:* -${formatCurrency(prop.discount)}\n` : ""
+      }*VALOR TOTAL:* ${formatCurrency(
+        prop.total || 0
+      )}\n*Validade:* ${
+        prop.validUntil || "15 dias"
+      }\n*Condições:* ${prop.paymentTerms}\n\nFicamos à disposição para fecharmos o pedido! 🚀`;
 
-    openExternalLink(
-      `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-    );
-  };
+      openExternalLink(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`);
+    },
+    [toast]
+  );
 
   // ── Convert to order (mesmo formato de pedido do CRM) ──
 
-  const handleConvertToOrder = async (prop: ProposalRec) => {
-    if (
-      !confirm(
-        `Deseja converter a proposta "${prop.proposalNumber}" em um Pedido ativo no CRM?`
+  const handleConvertToOrder = useCallback(
+    async (prop: ProposalRec) => {
+      if (
+        !confirm(
+          `Deseja converter a proposta "${prop.proposalNumber}" em um Pedido ativo no CRM?`
+        )
       )
-    )
-      return;
-    try {
-      await addOrder({
-        customerName: prop.clientName,
-        customerEmail: prop.clientEmail || "",
-        customerPhone: prop.clientPhone || "",
-        deliveryAddress: {
-          street: prop.clientAddress || "",
-          number: "",
-          neighborhood: "",
-          city: "",
-          zip: "",
-        },
-        items: prop.items.map((i) => ({
-          productId: i.productId || "custom-item",
-          productName: i.name,
-          quantity: i.quantity,
-          price: i.unitPrice,
-        })),
-        subtotal: prop.subtotal,
-        discount: prop.discount,
-        total: prop.total,
-        status: "processing",
-        deliveryMethod: "delivery",
-        paymentStatus: "paid",
-      });
-      await editItem(prop.id, { status: "approved" } as Record<string, unknown>);
-      toast.success("Proposta convertida em Pedido com sucesso!");
-    } catch (err: any) {
-      console.error("Erro ao converter proposta em pedido:", err);
-      toast.error("Erro ao converter proposta em pedido.");
-    }
-  };
+        return;
+      try {
+        await addOrder({
+          customerName: prop.clientName,
+          customerEmail: prop.clientEmail || "",
+          customerPhone: prop.clientPhone || "",
+          deliveryAddress: {
+            street: prop.clientAddress || "",
+            number: "",
+            neighborhood: "",
+            city: "",
+            zip: "",
+          },
+          items: prop.items.map((i) => ({
+            productId: i.productId || "custom-item",
+            productName: i.name,
+            quantity: i.quantity,
+            price: i.unitPrice,
+          })),
+          subtotal: prop.subtotal,
+          discount: prop.discount,
+          total: prop.total,
+          status: "processing",
+          deliveryMethod: "delivery",
+          paymentStatus: "paid",
+        });
+        await editItem(prop.id, { status: "approved" } as Record<string, unknown>);
+        toast.success("Proposta convertida em Pedido com sucesso!");
+      } catch (err: any) {
+        console.error("Erro ao converter proposta em pedido:", err);
+        toast.error("Erro ao converter proposta em pedido.");
+      }
+    },
+    [addOrder, editItem, toast]
+  );
 
   const filteredProposals = useMemo(() => {
     const s = search.toLowerCase();
@@ -594,8 +707,7 @@ export function ProposalsPage() {
           (p.proposalNumber || "").toLowerCase().includes(s) ||
           (p.title || "").toLowerCase().includes(s) ||
           (p.clientName || "").toLowerCase().includes(s);
-        const matchesStatus =
-          statusFilter === "all" || p.status === statusFilter;
+        const matchesStatus = statusFilter === "all" || p.status === statusFilter;
         return matchesSearch && matchesStatus;
       })
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -689,97 +801,14 @@ export function ProposalsPage() {
           </Button>
         </div>
       ) : (
-        <motion.div
-          variants={containerVariants}
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
-        >
-          {filteredProposals.map((prop) => (
-            <motion.div key={prop.id} variants={itemVariants}>
-              <Card hover className="flex h-full flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-xs font-black text-accent bg-accent-light px-2 py-0.5 rounded-md">
-                      {prop.proposalNumber}
-                    </span>
-                    <Badge variant={STATUS_VARIANT[prop.status] || "default"}>
-                      {STATUS_LABEL[prop.status] || prop.status}
-                    </Badge>
-                  </div>
-
-                  <h3 className="font-bold text-base text-foreground mt-3 line-clamp-1">
-                    {prop.title}
-                  </h3>
-                  <p className="text-xs font-medium text-muted-foreground mt-1">
-                    Cliente:{" "}
-                    <span className="font-bold text-foreground">
-                      {prop.clientName}
-                    </span>
-                  </p>
-
-                  <div className="mt-4 rounded-xl border border-border bg-muted/50 p-3">
-                    <div className="flex justify-between items-center text-xs text-muted-foreground">
-                      <span>{prop.items?.length || 0} item(ns) na proposta</span>
-                      <span>Válida até {prop.validUntil || "A combinar"}</span>
-                    </div>
-                    <div className="mt-2 flex items-baseline justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        Valor Total:
-                      </span>
-                      <span className="text-lg font-bold text-foreground">
-                        {formatCurrency(prop.total || 0)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-1.5">
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleGeneratePDF(prop)}
-                      title="Baixar PDF"
-                      className="p-2 text-muted-foreground hover:text-accent hover:bg-accent-light rounded-lg transition-colors"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleShareWhatsApp(prop)}
-                      title="Enviar WhatsApp"
-                      className="p-2 text-muted-foreground hover:text-success hover:bg-success-light rounded-lg transition-colors"
-                    >
-                      <Share2 className="h-4 w-4" />
-                    </button>
-                    {prop.status !== "approved" && (
-                      <button
-                        onClick={() => handleConvertToOrder(prop)}
-                        title="Converter em Pedido"
-                        className="p-2 text-muted-foreground hover:text-warning hover:bg-warning-light rounded-lg transition-colors"
-                      >
-                        <ShoppingBag className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => openEdit(prop)}
-                      title="Editar"
-                      className="p-2 text-muted-foreground hover:text-accent rounded-lg transition-colors"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(prop)}
-                      title="Excluir"
-                      className="p-2 text-muted-foreground hover:text-danger rounded-lg transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          ))}
-        </motion.div>
+        <ProposalsGrid
+          propsList={filteredProposals}
+          onGeneratePDF={handleGeneratePDF}
+          onShareWhatsApp={handleShareWhatsApp}
+          onConvertToOrder={handleConvertToOrder}
+          onEdit={openEdit}
+          onDelete={handleDelete}
+        />
       )}
 
       {/* Modal Criar / Editar Proposta */}
