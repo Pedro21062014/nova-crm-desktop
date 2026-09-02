@@ -11,28 +11,31 @@ const MIN_SYNCING_MS = 1200;
 const PROBE_INTERVAL_MS = 10000;
 /** Timeout de cada ping. */
 const PING_TIMEOUT_MS = 5000;
-// PING no PRÓPRIO backend do app (RTDB do projeto). Qualquer resposta HTTP
-// (200/401/etc.) prova que o backend está alcançável → online. Só ERRO DE
-// REDE ou TIMEOUT → offline. (Os eventos online/offline do navegador são
-// confiáveis no Electron/LINUX — bug conhecido do Electron, navigator.onLine
-// sempre true lá — por isso o ping é a fonte da verdade.)
-const PING_URL = "https://crm-e-vendas-default-rtdb.firebaseio.com/.json?shallow=-1";
+// Endpoint oficial do Google para teste de conectividade: responde 204 No
+// Content (ZERO bytes de conteúdo) — o app NENHUM consumo de cota do Firebase.
+// (Os eventos online/offline do navegador são inconfiáveis no Electron/Linux —
+// bug conhecido do Electron, navigator.onLine sempre true lá — por isso o ping.)
+const PING_URL = "https://clients3.google.com/generate_204";
 
 /**
- * Testa a conectividade com o backend do app.
- * true  → o servidor respondeu (tem internet)
+ * Testa a conectividade à internet via endpoint do Google (204, zero bytes).
+ * - method HEAD + mode "no-cors": o endpoint não envia headers CORS, então a
+ *   resposta é "opaca" — o que importa é se o fetch RESOLVE (servidor
+ *   respondeu = tem internet) ou LANÇA (sem rede = offline).
+ * true  → a rede respondeu (tem internet)
  * false → erro de rede / timeout (sem internet)
  */
-async function pingBackend(): Promise<boolean> {
+async function pingConnectivity(): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
-    await fetch(`${PING_URL}&t=${Date.now()}`, {
+    await fetch(PING_URL, {
+      method: "HEAD",
+      mode: "no-cors",
       cache: "no-store",
       signal: controller.signal,
     });
     clearTimeout(timer);
-    // Qualquer resposta HTTP (inclusive 401) = o backend respondeu = online
     return true;
   } catch {
     return false;
@@ -157,7 +160,7 @@ export function useOnlineStatus() {
 
   // ── Ping de conectividade (fonte da verdade no Electron/Linux) ──
   const runProbe = useCallback(async () => {
-    const ok = await pingBackend();
+    const ok = await pingConnectivity();
     if (!isMountedRef.current) return;
     const cur = statusRef.current;
 

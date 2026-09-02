@@ -4,6 +4,12 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.10.6] — 2026-09-02
+
+### 🔧 Correções
+- **Ping de conectividade sem gastar cota do Firebase**: o teste de internet agora usa o endpoint oficial do Google (`clients3.google.com/generate_204`) com requisição **HEAD** — resposta 204, **zero bytes** de conteúdo e zero acesso ao seu banco
+- Detecção de offline continua funcionando igual (banner amarelo + sincronização com % ao reconectar)
+
 ## [2.10.5] — 2026-09-02
 
 ### 🔧 Correções

@@ -241,3 +241,19 @@ Work Log:
 Stage Summary:
 - v2.10.5: detecção de offline confiável via ping no backend (todas as plataformas) — o banner amarelo aparece de verdade
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.5
+---
+Task ID: 1
+Agent: Main Agent
+Task: Trocar o ping de conectividade para endpoint Google (sem cota do Firebase) e publicar v2.10.6
+
+Work Log:
+- Contexto: IA do user recomendou usar HEAD + URL do Google p/ testar internet sem consumir cota do Firebase (o ping anterior batia no RTDB do projeto a cada 10s)
+- Verificação: http://google.com (URL citada pela IA) NAO retorna 204 — dá 301 → 200 com 83KB de HTML; a URL real do teste de conectividade do Google é https://clients3.google.com/generate_204 (204, 0 bytes; HEAD também funciona)
+- O endpoint NAO envia header CORS → fetch normal lançaria erro mesmo online (falso offline); solução: fetch HEAD + mode "no-cors" (resposta opaca: resolveu = tem internet, lançou = offline)
+- useOnlineStatus: pingConnectivity() substitui o ping no RTDB; todo o resto da máquina de estados (2 falhas seguidas, sync com %, eventos do navegador) intacto
+- Consequência: o app não faz NENHUMA requisição ao Firebase só para checar internet — cota 100% livre de overhead de ping
+- Build validado (tsc -b + vite build OK), versao 2.10.5 -> 2.10.6
+
+Stage Summary:
+- v2.10.6: ping de conectividade via Google generate_204 (HEAD, zero bytes, zero cota Firebase)
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.6
