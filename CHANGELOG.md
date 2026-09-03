@@ -9,6 +9,7 @@ e nas release notes do GitHub. A seção da versão atual é usada como body da 
 ### 🔧 Atualização de dependências
 - **Electron atualizado de 42.0.1 para 44.1.1** (a versão mais recente) — melhor desempenho, estabilidade e segurança do app
 - **electron-builder atualizado de 26.8.1 para 26.15.3** (mesmo major, compatível com o Electron 44)
+- **Ícone do app no instalador Windows e executável**: agora o `Nova-CRM-Setup.exe` e o atalho exibem o ícone do Nova CRM (antes era o ícone genérico do Electron)
 - Sem mudanças visíveis na interface — só o motor por trás
 
 ## [2.11.0] — 2026-09-02

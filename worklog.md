@@ -323,6 +323,8 @@ Work Log:
 - Versao atual: electron 42.0.1 (package.json ^42.0.1); npm view electron version -> 44.1.1 (latest)
 - npm install electron@44.1.1 --save-dev -> package.json ^44.1.1 + lock atualizado
 - electron-builder tambem desatualizado: 26.8.1 vs 26.15.3 (mesmo major 26, sem breaking change) — atualizado junto para garantir packaging correto do Electron 44 no CI
+- Falha no primeiro run da v2.11.1 (job Windows): electron-builder 26.15.3 virou erro hard p/ win.icon inexistente (26.8.1 ignorava silenciosamente) — "cannot find specified resource build/icon.ico"
+- Criei build/icon.png (512x512, copia do flatpak/icon.png) + build/icon.ico multi-size (256/128/64/48/32/24/16) via ImageMagick; package.json ja incluia build/**/* em files
 - Build local validado (tsc -b + vite build OK com electron 44.1.1 na devDependency), versao 2.11.0 -> 2.11.1
 
 Stage Summary:
