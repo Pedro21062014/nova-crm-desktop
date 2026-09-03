@@ -24,21 +24,32 @@ function num(v: unknown): number {
 /** Payload em formato CRM (inglês) a partir de um produto (PT ou EN). */
 export function productToCrmFormat(item: AnyRecord): AnyRecord {
   const name = item.name ?? item.nome ?? "";
+  const imageUrl = String(item.imageUrl ?? item.image ?? item.imagem ?? "");
   return {
     name: String(name),
     price: num(item.price ?? item.preco),
     stock: num(item.stock ?? item.estoque),
     category: String(item.category ?? item.categoria ?? ""),
     description: String(item.description ?? item.descricao ?? ""),
-    imageUrl: String(item.imageUrl ?? item.image ?? item.imagem ?? ""),
+    imageUrl,
+    // 2ª foto (o desktop mantém a 1ª em imageUrl, sem duplicar o base64)
+    images: Array.isArray(item.images) ? item.images : imageUrl ? [imageUrl] : [],
+    secondaryImageUrl: String(item.secondaryImageUrl ?? ""),
+    expirationDate: String(item.expirationDate ?? ""),
     active: item.active !== false && item.ativo !== false,
-    // Opções canônicas de produto do CRM web
-    hasWeightOptions: false,
-    weightOptions: [],
-    hasFlavorOptions: false,
-    flavorOptions: [],
-    hasAdditionalOptions: false,
-    additionalOptions: [],
+    orderIndex:
+      typeof item.orderIndex === "number" ? item.orderIndex : undefined,
+    // Opções de venda do CRM web (peso, sabor, adicionais e grupos de escolha).
+    // Documentos legados sem esses campos recebem os padrões (desativados/vazios).
+    hasWeightOptions: !!item.hasWeightOptions,
+    weightOptions: Array.isArray(item.weightOptions) ? item.weightOptions : [],
+    hasFlavorOptions: !!item.hasFlavorOptions,
+    flavorOptions: Array.isArray(item.flavorOptions) ? item.flavorOptions : [],
+    hasAdditionalOptions: !!item.hasAdditionalOptions,
+    additionalOptions: Array.isArray(item.additionalOptions)
+      ? item.additionalOptions
+      : [],
+    optionGroups: Array.isArray(item.optionGroups) ? item.optionGroups : [],
   };
 }
 

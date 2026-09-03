@@ -301,3 +301,17 @@ Work Log:
 Stage Summary:
 - v2.10.8: produtos e clientes sincronizam completos nos dois apps (escrita dual + migracao automatica do catalogo existente)
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.8
+
+## v2.11.0 — Paridade dos escopos de criação de produto com o CRM web
+
+Task: explorar o repo base (CRM) e portar TODOS os escopos da criação de produto para o desktop; lançar v2.11.0
+Work Log:
+- Mapeamento no repo base (somente leitura): ProductsManager.tsx — form base (foto1, foto2 opcional por upload/URL, nome, preço, estoque, validade date, categoria, descricao) + seção "Opções de venda": hasWeightOptions/weightOptions[{weight,price,imageUrl}], hasFlavorOptions/flavorOptions[{name,price,imageUrl}], hasAdditionalOptions/additionalOptions[{name,price,imageUrl}], optionGroups[{id,name,isRequired,minQuantity,maxQuantity,options[{id,name,price,imageUrl}]}]; save handler grava imageUrl, images[], secondaryImageUrl, os 4 flags+arrays, expirationDate, orderIndex = max+1
+- Checkout (StoreComponents.tsx L191-260): peso SUBSTITUI o preço; sabor/adicionais/opções de grupo SOMAM (0 = grátis); isRequired força min>=1; maxQuantity padrão 1; imageUrl da variação troca a imagem exibida
+- src/services/firebase.ts: interface Product ganha campos canônicos EN (name/price/stock/category/description/imageUrl/images/secondaryImageUrl/expirationDate/orderIndex) + os 4 escopos de opção tipados
+- src/lib/dataFormat.ts: productToCrmFormat agora passa os 4 escopos (com defaults p/ docs legados PT: flags false, arrays []) + images/secondaryImageUrl/expirationDate/orderIndex
+- src/components/products/ProductsPage.tsx (reescrito): form completo com paridade — foto2 (upload + URL -> secondaryImageUrl), validade (date), preço desativado+zerado no modo peso, seção "Opções de venda" com os 4 escopos (SwitchRow), linhas de variação = foto (VariationImageBtn, 640px q0.82 via convertFileToBase64) + nome/peso + preço R$ + remover, grupos com isRequired toggle (min 0->1), min>=0/max>=1 e opção "+ R$" adicional, OptInput local (input raw p/ flex nas linhas), foto principal comprimida 1024px q0.82 antes de salvar, openEdit carrega todos os campos novos, handleSave payload completo dual (orderIndex = max+1 novo / preserva edit; arrays zerados quando flag off; images[0..1]), badges de opção nos cards (Scale/CakeSlice/PlusCircle/Layers)
+- Build validado (tsc -b + vite build OK), versao 2.10.8 -> 2.11.0
+
+Stage Summary:
+- v2.11.0: criação de produto com paridade total dos escopos do CRM web (peso, sabor, adicionais, grupos, foto2, validade)

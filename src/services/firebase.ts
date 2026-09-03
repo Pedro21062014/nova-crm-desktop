@@ -360,6 +360,33 @@ export interface Product {
   ativo?: boolean;
   createdAt?: Timestamp | number;
   updatedAt?: Timestamp | number;
+  // ── Campos canônicos do CRM web (escrita dual) ──
+  name?: string;
+  price?: number;
+  stock?: number;
+  category?: string;
+  description?: string;
+  imageUrl?: string;
+  images?: string[];
+  secondaryImageUrl?: string;
+  expirationDate?: string;
+  active?: boolean;
+  orderIndex?: number;
+  // Opções de venda (escopos do CRM): peso/tamanho, sabor, adicionais e grupos
+  hasWeightOptions?: boolean;
+  weightOptions?: { weight: string; price: number; imageUrl?: string }[];
+  hasFlavorOptions?: boolean;
+  flavorOptions?: { name: string; price: number; imageUrl?: string }[];
+  hasAdditionalOptions?: boolean;
+  additionalOptions?: { name: string; price: number; imageUrl?: string }[];
+  optionGroups?: {
+    id: string;
+    name: string;
+    isRequired: boolean;
+    minQuantity: number;
+    maxQuantity: number;
+    options: { id: string; name: string; price: number; imageUrl?: string }[];
+  }[];
 }
 
 /**

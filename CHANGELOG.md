@@ -4,6 +4,19 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.11.0] — 2026-09-02
+
+### 🆙 Paridade total com a criação de produtos do CRM web
+- **Vender por Peso / Tamanho**: cada variação (ex: 500g, 1kg) tem nome, preço e até foto própria — no site, o preço da variação escolhida SUBSTITUI o preço principal (que fica desativado)
+- **Vender por Sabor**: variações com adicional em R$ somado ao preço do produto (ex: Chocolate, Morango)
+- **Adicionais**: extras pagos que o cliente pode adicionar no carrinho (ex: Chantilly, Calda)
+- **Grupos de Opções Extras**: grupos com nome, obrigatório ou não, mínimo/máximo de escolhas e opções com valor adicional (ex: "Escolha o Pão" — 1 escolha obrigatória)
+- **Foto 2 opcional**: segunda imagem do produto (upload ou URL) — aparece no carrossel do produto no site
+- **Validade (data opcional)**: campo de data de validade no cadastro do produto
+- Todas as opções aceitam **foto por variação** (enviada já comprimida, como as fotos do app)
+- Fotos principais agora são comprimidas automaticamente (1024px) antes de salvar
+- Tudo grava nos DOIS formatos (desktop + CRM web), igual à correção da 2.10.8 — as opções aparecem tanto no app quanto no site
+
 ## [2.10.8] — 2026-09-02
 
 ### 🔧 Correções
