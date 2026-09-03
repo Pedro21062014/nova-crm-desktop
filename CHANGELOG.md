@@ -4,6 +4,13 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.11.1] — 2026-09-03
+
+### 🔧 Atualização de dependências
+- **Electron atualizado de 42.0.1 para 44.1.1** (a versão mais recente) — melhor desempenho, estabilidade e segurança do app
+- **electron-builder atualizado de 26.8.1 para 26.15.3** (mesmo major, compatível com o Electron 44)
+- Sem mudanças visíveis na interface — só o motor por trás
+
 ## [2.11.0] — 2026-09-02
 
 ### 🆙 Paridade total com a criação de produtos do CRM web

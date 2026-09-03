@@ -315,3 +315,15 @@ Work Log:
 
 Stage Summary:
 - v2.11.0: criação de produto com paridade total dos escopos do CRM web (peso, sabor, adicionais, grupos, foto2, validade)
+
+## v2.11.1 — Update do Electron para a versão mais recente
+
+Task: atualizar Electron para a versão mais recente e lançar nova versão
+Work Log:
+- Versao atual: electron 42.0.1 (package.json ^42.0.1); npm view electron version -> 44.1.1 (latest)
+- npm install electron@44.1.1 --save-dev -> package.json ^44.1.1 + lock atualizado
+- electron-builder tambem desatualizado: 26.8.1 vs 26.15.3 (mesmo major 26, sem breaking change) — atualizado junto para garantir packaging correto do Electron 44 no CI
+- Build local validado (tsc -b + vite build OK com electron 44.1.1 na devDependency), versao 2.11.0 -> 2.11.1
+
+Stage Summary:
+- v2.11.1: motor Electron atualizado 42.0.1 -> 44.1.1 (+ electron-builder 26.15.3)

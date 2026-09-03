@@ -1,8 +1,0 @@
-# Esta pasta contém os ícones do aplicativo (icon.png e icon.ico)
-# usados pelo electron-builder para gerar os instaladores.
-#
-# icon.png  — usado no Linux (.deb/AppImage) e macOS (.dmg). Ideal 512x512px PNG com fundo transparente.
-# icon.ico  — usado no Windows (taskbar + janela + instalador NSIS). Multi-resolução (16/32/48/64/128/256px).
-#
-# Se voce for atualizar o logo, suba um novo icon.png aqui pelo GitHub UI
-# e depois peça para o assistente gerar o icon.ico correspondente.
