@@ -278,3 +278,26 @@ Work Log:
 Stage Summary:
 - v2.10.7: salvar offline nao trava (salva local em ate 3s + sync automatico), IDs locais nas criacoes, todas as abas
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.7
+---
+Task ID: 1
+Agent: Main Agent
+Task: Corrigir sincronização de produtos/clientes sem dados completos no CRM web e publicar v2.10.8
+
+Work Log:
+- Diagnóstico: o desktop gravava produtos em PT (nome, preco, categoria, descricao, imagem, estoque, ativo) e clientes em PT (nome, telefone, endereco...), mas o CRM web (repo base) LE SÓ o formato canônico EN:
+  - produto: name, price, stock, category, description, imageUrl (+ hasWeightOptions/weightOptions/hasFlavorOptions/flavorOptions/hasAdditionalOptions/additionalOptions/orderIndex)
+  - cliente: name, phone, email, clientType, address{street,number,neighborhood,city,zip,complement}
+  - confirmacao direta no repo CRM: ProductsManager.tsx (ler/criar p.name/p.price/p.stock...) e ClientsManager.tsx (c.name/c.phone/c.email)
+  - o desktop leria os dois (getters duais nome||name) por isso tudo parecia certo LA no desktop
+- Verificado que os demais fluxos ja estao canonicos: pedidos (customerName/items/total/status), pipeline (title/clientName/value/probability/stage — igual ao SalesPipelineManager), cupons (code/type/value — "Save in CRM format"), propostas/tarefas/automacoes (portadas do CRM em v2.10.0)
+- Caminho confirmado igual: getStorePath (CRM) e ensureMerchantPath (desktop) -> merchants/{uid}/{subcollection}
+- Nova lib src/lib/dataFormat.ts: productToCrmFormat/productNeedsCrmSync + clientToCrmFormat/clientNeedsCrmSync (mapeia PT->EN; address string vira {street:...}; numero via parseFloat seguro)
+- ProductsPage.handleSave: payload agora PT + EN (imagem so em imageUrl, sem duplicar base64; orderIndex = produtos.length)
+- ClientsPage.handleSave: payload PT + EN (name/phone/email/address/clientType; campos commercial ja eram iguais: contactPerson, purchasePotential, nextVisit...)
+- Migracao unica por aba (ref guard + max 50 por load, fire-and-forget com log): documentos so-PT ganham os campos EN via editItem (merge) ao carregar a aba — sem tocar em docs ja canonicos
+- Teste por simulacao: 4 cenarios (produto PT/EN, cliente PT/EN) — normalizacao ok e idempotente
+- Build validado (tsc -b + vite build OK), versao 2.10.7 -> 2.10.8
+
+Stage Summary:
+- v2.10.8: produtos e clientes sincronizam completos nos dois apps (escrita dual + migracao automatica do catalogo existente)
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.8

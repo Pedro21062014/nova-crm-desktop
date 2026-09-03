@@ -4,6 +4,14 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.10.8] — 2026-09-02
+
+### 🔧 Correções
+- **Produtos e clientes agora sincronizam COMPLETOS com o CRM web**: o desktop gravava só em formato PT (nome, preco, telefone...) e o CRM web lê só o formato canônico (name, price, phone, address) — por isso apareciam "sem dados"
+- Agora cada salvamento grava os **dois formatos** (imagem do produto vai só em `imageUrl`, sem duplicar o base64)
+- **Migração automática**: ao abrir Produtos ou Clientes, os documentos antigos (só PT) ganham os campos canônicos sozinhos — o catálogo existente passa a aparecer completo no CRM web sem refazer nada
+- Pedidos, Pipeline, Propostas, Tarefas e Automações já usavam o formato canônico (confirmado, sem mudança)
+
 ## [2.10.7] — 2026-09-02
 
 ### 🔧 Correções

@@ -1,10 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Plus, Package, Edit2, Trash2, X, Upload, Camera } from "lucide-react";
 import { Card, Button, Input, Badge, Skeleton, Modal } from "@/components/ui";
 import { useProducts } from "@/hooks/useFirebaseData";
 import { type Product } from "@/services/firebase";
 import { formatCurrency, cn } from "@/lib/utils";
+import { productToCrmFormat, productNeedsCrmSync } from "@/lib/dataFormat";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -55,6 +56,23 @@ export function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const crmMigratedRef = useRef(false);
+
+  // Migração única: produtos criados no formato legado PT (sem os campos
+  // canônicos EN do CRM web) recebem os campos EN ao carregar a aba —
+  // assim o catálogo existente também aparece completo no CRM web.
+  useEffect(() => {
+    if (crmMigratedRef.current || loading) return;
+    const stale = products.filter((p) => productNeedsCrmSync(p as any));
+    if (stale.length === 0) return;
+    crmMigratedRef.current = true;
+    console.log(`[Products] Normalizando ${stale.length} produto(s) para o formato do CRM web`);
+    stale.slice(0, 50).forEach((p) => {
+      editItem(p.id, productToCrmFormat(p as any) as Partial<Record<string, unknown>>)
+        .then(() => console.log(`[Products] Produto ${p.id} normalizado`))
+        .catch((err) => console.warn(`[Products] Falha ao normalizar ${p.id}:`, err));
+    });
+  }, [products, loading, editItem]);
 
   const categories = ["Todos", ...Array.from(new Set(products.map((p) => pCategory(p)).filter(Boolean)))];
 
@@ -118,10 +136,24 @@ export function ProductsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Grava nos DOIS formatos: PT (legado do desktop) + EN canônico do CRM
+      // web — assim o produto aparece completo nos dois apps. A imagem vai
+      // só em imageUrl (sem duplicar o base64 no campo "imagem").
+      const crm = productToCrmFormat({ ...form });
+      const payload: Record<string, unknown> = {
+        nome: form.nome,
+        preco: form.preco,
+        categoria: form.categoria,
+        descricao: form.descricao,
+        estoque: form.estoque,
+        ativo: form.ativo,
+        ...crm,
+        orderIndex: products.length,
+      };
       if (editingId) {
-        await editItem(editingId, form as unknown as Partial<Record<string, unknown>>);
+        await editItem(editingId, payload as Partial<Record<string, unknown>>);
       } else {
-        await addItem(form as Record<string, unknown>);
+        await addItem(payload);
       }
       setModalOpen(false);
     } catch (err) {

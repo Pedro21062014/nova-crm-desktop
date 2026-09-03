@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -31,6 +31,7 @@ import {
   importClientsFromExcel,
   downloadClientTemplate,
 } from "@/lib/clientsExcel";
+import { clientToCrmFormat, clientNeedsCrmSync } from "@/lib/dataFormat";
 
 // Helpers for field name compatibility
 // Also handles cases where the value is an object (e.g. endereco = {street, city, ...})
@@ -106,6 +107,23 @@ export function ClientsPage() {
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedFileRef = useRef<File | null>(null);
+  const crmMigratedRef = useRef(false);
+
+  // Migração única: clientes criados no formato legado PT (sem name/phone)
+  // recebem os campos canônicos do CRM web ao carregar a aba — assim a base
+  // existente também aparece completa no app web.
+  useEffect(() => {
+    if (crmMigratedRef.current || loading) return;
+    const stale = clients.filter((c) => clientNeedsCrmSync(c as any));
+    if (stale.length === 0) return;
+    crmMigratedRef.current = true;
+    console.log(`[Clients] Normalizando ${stale.length} cliente(s) para o formato do CRM web`);
+    stale.slice(0, 50).forEach((c) => {
+      editItem(c.id, clientToCrmFormat(c as any) as Partial<Record<string, unknown>>)
+        .then(() => console.log(`[Clients] Cliente ${c.id} normalizado`))
+        .catch((err) => console.warn(`[Clients] Falha ao normalizar ${c.id}:`, err));
+    });
+  }, [clients, loading, editItem]);
 
   // ── Filtro por tipo (Consumidor / Ponto Comercial) + busca textual ──
   const filtered = useMemo(() =>
@@ -191,6 +209,9 @@ export function ClientsPage() {
         const potNum = typeof potRaw === "number" ? potRaw : Number(String(potRaw || "").replace(/[^0-9,.-]/g, "").replace(",", "."));
         payload.purchasePotential = !isNaN(potNum) && potNum > 0 ? potNum : 0;
       }
+      // Formato canônico do CRM web (name/phone/address) — o cliente
+      // aparece completo no app web; o desktop continua lendo os campos PT.
+      Object.assign(payload, clientToCrmFormat({ ...form }));
       if (editingId) {
         await editItem(editingId, payload as Partial<Record<string, unknown>>);
       } else {
