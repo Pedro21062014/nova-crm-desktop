@@ -4,6 +4,13 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.10.7] — 2026-09-02
+
+### 🔧 Correções
+- **Salvar não trava mais sem internet**: clicar em "Salvar" offline salva **na hora na fila local** (aguarda no máximo 3s em vez de ficar travado até você cancelar) e sincroniza sozinho quando a conexão volta
+- Criações (clientes, produtos, pipeline, propostas, tarefas, automações, conversas) agora usam **ID gerado localmente** — o item já nasce com identidade e não depende do servidor
+- Válido em **todas as abas**: os mesmos salvamentos funcionam online (confirmado pelo servidor) e offline (salvo local + sincronização com a % que você vê no topo)
+
 ## [2.10.6] — 2026-09-02
 
 ### 🔧 Correções

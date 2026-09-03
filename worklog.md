@@ -257,3 +257,24 @@ Work Log:
 Stage Summary:
 - v2.10.6: ping de conectividade via Google generate_204 (HEAD, zero bytes, zero cota Firebase)
 - Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.6
+---
+Task ID: 1
+Agent: Main Agent
+Task: Corrigir "salvar travado" offline (botão ficava carregando até cancelar) em todas as abas e publicar v2.10.7
+
+Work Log:
+- Problema: sem internet, o botão de Salvar ficava "travado" (loading) porque o await da escrita Firebase só resolve no ack do servidor — offline esse ack nunca chega; o user precisava clicar em Cancelar
+- Correcao 1 (central, syncTracker.trackWrite): a UI agora aguarda a confirmacao do servidor por no maximo WRITE_ACK_TIMEOUT_MS (3s) via Promise.race:
+  - online: ack em <1s → resolve normal (comerciante nao percebe diferenca)
+  - offline: resolve como "salvo local" apos 3s — a escrita continua na fila (contador do tracker segue a Promise REAL) e sincroniza quando reconecta (banner "Sincronizando X%")
+  - erro real (ex: permission-denied) continua propagando pro catch (toast de erro)
+  - done.catch() evita unhandled rejection quando o erro chega apos o timeout
+  - como TODAS as escritas passam pelos wrappers, o fix vale para TODAS as abas (clients, products, orders, pipeline, proposals, tasks, automations, chat, configs)
+- Correcao 2 (IDs locais): create() e createChatConversation() trocaram addDoc por generateDocId() + setDoc — o ID ja existe na hora (mesmo offline); addDoc so devolveria o ID apos o ack (e quebraria no timeout, que resolve undefined)
+- Teste por simulacao: 4 cenarios (ack 100ms / ack nunca / rejeicao real / contador segue ate ack real) — todos ok
+- Nota: dados Firestore sobrevivem a restart (IndexedDB persistence ja ativa); mensagens de chat (RTDB) ficam em memoria offline — se fechar o app sem net, elas se perdem (limitacao do SDK RTDB v12, sem persistent cache)
+- Build validado (tsc -b + vite build OK), versao 2.10.6 -> 2.10.7
+
+Stage Summary:
+- v2.10.7: salvar offline nao trava (salva local em ate 3s + sync automatico), IDs locais nas criacoes, todas as abas
+- Release: https://github.com/Pedro21062014/nova-crm-desktop/releases/tag/v2.10.7

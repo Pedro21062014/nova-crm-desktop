@@ -3,7 +3,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  addDoc as fsAddDoc,
   setDoc as fsSetDoc,
   updateDoc as fsUpdateDoc,
   deleteDoc as fsDeleteDoc,
@@ -54,8 +53,23 @@ const setDoc = ((reference: any, data: any, options?: any) =>
 const updateDoc = ((...args: any[]) =>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   trackWrite((fsUpdateDoc as any)(...args))) as typeof fsUpdateDoc;
-const addDoc: typeof fsAddDoc = (...args) => trackWrite(fsAddDoc(...args));
 const deleteDoc: typeof fsDeleteDoc = (...args) => trackWrite(fsDeleteDoc(...args));
+
+// Gera um ID de documento localmente (mesmo formato dos IDs do Firestore).
+// Usado nas criações p/ o ID já existir na hora (mesmo sem internet):
+// setDoc com ID próprio resolve localmente; addDoc só daria o ID após o
+// ack do servidor (e travaria o botão de salvar offline).
+function generateDocId(): string {
+  const CHARS =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.";
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  let id = "";
+  for (let i = 0; i < bytes.length; i++) {
+    id += CHARS[bytes[i] % CHARS.length];
+  }
+  return id;
+}
 
 // ── Merchant Resolution ──
 //
@@ -125,14 +139,18 @@ export async function create<T extends Record<string, unknown>>(
   try {
     const path = ensureMerchantPath();
     console.log(`[Firestore] Creating doc in ${path}/${subcollection}`);
-    const colRef = collection(db, path, subcollection);
-    const docRef = await addDoc(colRef, {
+    // ID gerado localmente + setDoc: o ID está disponível na hora e a
+    // escrita entra na fila local (com persistence offline do Firestore) —
+    // sem internet o botão de salvar NÃO trava (ver trackWrite).
+    const id = generateDocId();
+    const docRef = doc(db, path, subcollection, id);
+    await setDoc(docRef, {
       ...data,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
-    console.log(`[Firestore] Document created with ID: ${docRef.id}`);
-    return docRef.id;
+    } as Record<string, unknown>);
+    console.log(`[Firestore] Document created with ID: ${id}`);
+    return id;
   } catch (err: any) {
     console.error(`[Firestore] Error creating document in ${subcollection}:`, err);
     if (err.code === "permission-denied") {
@@ -953,19 +971,22 @@ export async function createChatConversation(
 ): Promise<string> {
   if (!_merchantId) throw new Error("Usuário não autenticado");
   try {
-    // Create in Firestore (primary, where CRM stores it)
+    // Create in Firestore (primary, where CRM stores it).
+    // ID local + setDoc → disponível na hora mesmo sem internet.
     const path = ensureMerchantPath();
     const colRef = collection(db, path, "chats");
-    const docRef = await addDoc(colRef, {
+    const chatId = generateDocId();
+    const docRef = doc(colRef, chatId);
+    await setDoc(docRef, {
       customerName: conversation.customerName,
       customerId: conversation.customerId || "",
       customerPhone: conversation.customerPhone || "",
       lastMessage: "",
       lastMessageSender: "merchant" as const,
       updatedAt: Timestamp.now(),
-    });
-    console.log("[Firestore] Chat conversation created:", docRef.id);
-    return docRef.id;
+    } as Record<string, unknown>);
+    console.log("[Firestore] Chat conversation created:", chatId);
+    return chatId;
   } catch (fsErr: any) {
     // Firestore failed, try RTDB as fallback
     console.warn("[Chat] Firestore create failed, trying RTDB:", fsErr);
