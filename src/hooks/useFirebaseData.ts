@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, useSyncExternalStore } from "react";
 import {
   subscribe as firebaseSubscribe,
   create as firebaseCreate,
@@ -6,6 +6,8 @@ import {
   removeItem as firebaseRemoveItem,
   setMerchantId,
   getMerchantId,
+  onStoreChange,
+  getStoreVersion,
   type Product,
   type Client,
   type Order,
@@ -21,6 +23,8 @@ import { toMs } from "@/services/firebase";
 
 export function useFirebaseList<T>(subcollection: string) {
   const { user } = useAuth();
+  // Versão da loja ativa: quando o usuário troca de loja, reassina tudo
+  const storeVersion = useSyncExternalStore(onStoreChange, getStoreVersion);
   const [data, setData] = useState<Record<string, T> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +128,7 @@ export function useFirebaseList<T>(subcollection: string) {
         unsubscribeRef.current = null;
       }
     };
-  }, [subcollection, user]);
+  }, [subcollection, user, storeVersion]);
 
   const items = data
     ? Object.entries(data).map(([id, item]) => {

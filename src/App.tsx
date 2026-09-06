@@ -1,8 +1,10 @@
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { ActiveStoreProvider } from "@/hooks/useActiveStore";
 import { ToastProvider } from "@/hooks/useToast";
 import { AppLayout } from "@/components/layout";
 import { LoginPage } from "@/components/auth/LoginPage";
+import { TeamPage } from "@/components/team/TeamPage";
 import { DashboardPage } from "@/components/dashboard/DashboardPage";
 import { ProductsPage } from "@/components/products/ProductsPage";
 import { ClientsPage } from "@/components/clients/ClientsPage";
@@ -36,24 +38,27 @@ function ProtectedRoutes() {
   }
 
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/minha-loja" element={<MinhaLojaPage />} />
-        <Route path="/produtos" element={<ProductsPage />} />
-        <Route path="/clientes" element={<ClientsPage />} />
-        <Route path="/pedidos" element={<OrdersPage />} />
-        <Route path="/cupons" element={<CouponsPage />} />
-        <Route path="/pipeline" element={<PipelinePage />} />
-        <Route path="/propostas" element={<ProposalsPage />} />
-        <Route path="/tarefas" element={<TasksPage />} />
-        <Route path="/automacoes" element={<AutomationsPage />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/configuracoes" element={<SettingsPage />} />
+    <ActiveStoreProvider>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/minha-loja" element={<MinhaLojaPage />} />
+          <Route path="/produtos" element={<ProductsPage />} />
+          <Route path="/clientes" element={<ClientsPage />} />
+          <Route path="/pedidos" element={<OrdersPage />} />
+          <Route path="/cupons" element={<CouponsPage />} />
+          <Route path="/pipeline" element={<PipelinePage />} />
+          <Route path="/propostas" element={<ProposalsPage />} />
+          <Route path="/tarefas" element={<TasksPage />} />
+          <Route path="/automacoes" element={<AutomationsPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/equipe" element={<TeamPage />} />
+          <Route path="/configuracoes" element={<SettingsPage />} />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </ActiveStoreProvider>
   );
 }
 

@@ -4,6 +4,24 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.12.0] — 2026-09-03
+
+### 🆕 Seletor de Loja (multi-loja)
+- Novo botão no topo da sidebar com a loja ativa (logo + nome)
+- Troque entre suas lojas: a loja principal + qualquer sub-loja criada no CRM web
+- Ao trocar de loja, TODOS os dados do app (produtos, clientes, pedidos, chat...) trocam automaticamente para a loja selecionada
+- Funciona igual ao seletor do CRM web (mesma persistência)
+
+### 🆕 Nova aba: Equipe
+- **Convide colaboradores** por e-mail com cargo (Administrador, Gerente Geral, Vendedor & CRM, Estoquista & Pedidos, Atendente de Mensagens ou Personalizado)
+- **Permissões granulares por módulo**: cada colaborador acessa só as abas que você liberar (pedidos, produtos, clientes, funil, propostas, tarefas, automações, vitrine, cupons, entregas, chat, equipe)
+- **Presença em tempo real**: veja quem está online agora na sua equipe (sincroniza com o CRM web — aparece nos dois apps)
+- Editar cargo/permissões, remover/revogar convites e copiar link de convite
+- **Lojas da Equipe**: se você for convidado para uma loja de outro lojista, ela aparece no seletor de loja — clique e comece a trabalhar nela (só com as abas liberadas)
+
+### 🔧 Ajustes
+- Ao operar numa loja de equipe, as abas sem permissão somem do menu e o app volta ao dashboard se você estiver numa delas
+
 ## [2.11.1] — 2026-09-03
 
 ### 🔧 Atualização de dependências

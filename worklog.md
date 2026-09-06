@@ -329,3 +329,24 @@ Work Log:
 
 Stage Summary:
 - v2.11.1: motor Electron atualizado 42.0.1 -> 44.1.1 (+ electron-builder 26.15.3)
+
+## v2.12.0 — Seletor de loja + Aba Equipe (paridade com CRM web)
+
+Task: colocar seletor de loja e a aba equipe igual ao repo base
+Work Log:
+- Mapeamento no repo base (somente leitura): ActiveStoreContext.tsx (model: main=merchants/{uid}, sub=merchants/{uid}/stores/{id}, team=merchants/{ownerUid}; localStorage novaCrmActiveStoreId/novaCrmActiveTeamStore; getStorePath; hasPermission), ActiveStoreSwitcher.tsx (dropdown: minhas lojas + lojas da equipe via teamInvites por email com dedup por merchantId + nome/logo ao vivo do doc do merchant; auto-seleciona 1a loja de equipe se nada salvo), TeamManager.tsx (1652 linhas: ROLE_PRESETS 5+custom, PERMISSION_METADATA 14 mods em 3 categorias, writes team/{sanitized}+team/{email}+teamInvites/{key}+teamInvites/{emailKey}, edit/update/delete espelhados, convites recebidos com "Acessar Loja"), useTeamPresence.ts (RTDB team_presence/{merchantId}/{uid} heartbeat 15s + onDisconnect + dual-sync Firestore merchants/{merchantId}/teamPresence, fallback online se lastSeen < 45s), Dashboard.tsx routePermissionMap (chat -> clients, team sempre visivel)
+- src/services/firebase.ts: store-aware — MAIN_STORE_ID, _activeStoreId/_activeTeamMerchantId, setActiveStore/getActiveStore/getStoreVersion/onStoreChange (pub-sub); ensureMerchantPath() agora retorna merchants/{owner} (equipe) ou merchants/{uid}/stores/{id} (sub) ou merchants/{uid} (main); exportado; todos os helpers (getAll/getById/create/update/remove/subscribe, merchant doc helpers, RTDB merchant + chats) usam o path store-aware
+- src/lib/teamRoles.ts (novo): tipos TeamRole/TeamPermissions/TeamMember/TeamPresence/ActiveTeamStoreInfo + DEFAULT/ALL_PERMISSIONS + ROLE_PRESETS (5+custom) + PERMISSION_METADATA (14) + CATEGORY_LABELS + ROUTE_PERMISSION_MAP do desktop + sanitizeDocId
+- src/hooks/useActiveStore.tsx (novo): ActiveStoreProvider — estado activeStoreId/activeTeamStore (localStorage, mesmas chaves do CRM), propaga setMerchantId+setActiveStore no auth change e em trocas; escuta revogacao (docs team/{uid}+team/{email} somem -> reset); hasPermission (dono=todo, colaborador=permissions)
+- src/hooks/useTeamPresence.ts (novo): port do hook do CRM (RTDB + Firestore, compat cross-app)
+- src/components/layout/StoreSwitcher.tsx (novo): dropdown no topo da sidebar (expanded + collapsed), secoes Minhas Lojas / Lojas da Equipe, links Minha Equipe + Gerenciar Loja, auto-select 1a loja de equipe
+- src/components/team/TeamPage.tsx (novo, /equipe): header + banner de convites recebidos (Acessar Loja), metricas (total/online/pendentes), busca + filtros (todos/online/pendentes/admins), lista com owner no topo + presence + badges de status, modal convidar (email/nome/6 presets + toggles por modulo com Todas/Nenhuma por categoria), modal editar, modal remover; writes identicos ao CRM (team sanitized+email, teamInvites key+emailKey; edit/delete espelhados)
+- src/hooks/useFirebaseData.ts: useSyncExternalStore(onStoreChange, getStoreVersion) no deps do effect -> re-assina ao trocar de loja
+- src/hooks/useStoreConfig.ts: assina doc da loja ativa (ensureMerchantPath) + re-assina p/ storeVersion; saveConfig grava no doc da loja ativa
+- src/components/layout/Sidebar.tsx: item Equipe (Users2) antes de Configuracoes; StoreSwitcher abaixo do logo; filtro visibleNavItems por ROUTE_PERMISSION_MAP quando isTeamStore; redirect p/ dashboard se rota atual perder permissao
+- src/App.tsx: ActiveStoreProvider dentro de AuthProvider + rota /equipe
+- Obs: node_modules foi corrompido por um npx tsc (pacote fake) durante o dev — reinstalei via npm install; lock apenas sincronizado p/ 2.11.1
+- Build validado (tsc -b + vite build OK), versao 2.11.1 -> 2.12.0
+
+Stage Summary:
+- v2.12.0: seletor de loja (multi-loja + lojas de equipe) e aba Equipe completa (convites, permissoes por modulo, presenca realtime, convites recebidos)

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -16,12 +16,16 @@ import {
   FileText,
   CalendarCheck,
   Zap,
+  Users2,
 } from "lucide-react";
 import logoSvg from "/logo.svg";
 import { useAuth } from "@/hooks/useAuth";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { useStoreConfig } from "@/hooks/useStoreConfig";
 import { useNotifications } from "@/hooks/useNotifications";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { StoreSwitcher } from "@/components/layout/StoreSwitcher";
+import { ROUTE_PERMISSION_MAP } from "@/lib/teamRoles";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -37,6 +41,7 @@ const navItems = [
   { icon: CalendarCheck, label: "Tarefas", path: "/tarefas" },
   { icon: Zap, label: "Automações", path: "/automacoes" },
   { icon: MessageSquare, label: "Chat", path: "/chat" },
+  { icon: Users2, label: "Equipe", path: "/equipe" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 
@@ -49,9 +54,32 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { isTeamStore, hasPermission } = useActiveStore();
   const { config } = useStoreConfig();
   const { lowStockCount, unreadMessageCount } = useNotifications();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+
+  // Filtra as abas por permissão quando operando numa loja de equipe
+  // (igual ao routePermissionMap do CRM web). Dashboard, Equipe e
+  // Configurações sempre visíveis.
+  const visibleNavItems = navItems.filter((item) => {
+    if (!isTeamStore) return true;
+    if (item.path === "/" || item.path === "/equipe" || item.path === "/configuracoes") return true;
+    const permKey = ROUTE_PERMISSION_MAP[item.path];
+    if (!permKey) return true;
+    return hasPermission(permKey);
+  });
+
+  // Se a rota atual ficou sem permissão (ex: trocou de loja), volta p/ o dashboard
+  useEffect(() => {
+    if (!isTeamStore) return;
+    if (location.pathname === "/" || location.pathname === "/equipe" || location.pathname === "/configuracoes") return;
+    const permKey = ROUTE_PERMISSION_MAP[location.pathname];
+    if (permKey && !hasPermission(permKey)) {
+      navigate("/", { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTeamStore, hasPermission, location.pathname]);
 
   // Get the store logo URL from storeConfig (CRM format) or old format
   const storeLogoUrl = config?.logoUrl || config?.logo || "";
@@ -125,9 +153,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {!collapsed && <NotificationBell panelPosition="top" />}
       </div>
 
+      {/* Seletor de Loja (troca entre lojas próprias e lojas de equipe) */}
+      {user && <StoreSwitcher collapsed={collapsed} />}
+
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
           const badge = getBadge(item.path);

@@ -1,7 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
 import {
   setMerchantId,
   getMerchantId,
+  ensureMerchantPath,
+  onStoreChange,
+  getStoreVersion,
   type StoreConfig,
 } from "@/services/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -80,6 +83,8 @@ function extractStoreConfig(merchantData: any): StoreConfig {
 
 export function useStoreConfig() {
   const { user } = useAuth();
+  // Reassina quando o usuário troca de loja ativa
+  const storeVersion = useSyncExternalStore(onStoreChange, getStoreVersion);
   const [config, setConfig] = useState<StoreConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +127,9 @@ export function useStoreConfig() {
         // We use onSnapshot on the merchant doc directly.
         console.log(`[useStoreConfig] Subscribing to Firestore merchant doc: ${uid}`);
 
-        const docRef = doc(db, "merchants", uid);
+        // Doc da loja ATIVA (main, sub-loja ou loja de equipe)
+        const storePath = ensureMerchantPath();
+        const docRef = doc(db, storePath);
 
         const unsubscribe = onSnapshot(
           docRef,
@@ -170,7 +177,7 @@ export function useStoreConfig() {
         unsubscribeRef.current = null;
       }
     };
-  }, [user]);
+  }, [user, storeVersion]);
 
   const saveConfig = useCallback(
     async (data: Partial<StoreConfig>) => {
@@ -232,8 +239,9 @@ export function useStoreConfig() {
 
         console.log("[useStoreConfig] Saving storeConfig:", dotNotationUpdate);
 
-        const docRef = doc(db, "merchants", uid);
-        await trackWrite(fsSetDoc(docRef, dotNotationUpdate, { merge: true }));
+        // Salva no doc da loja ATIVA (main, sub-loja ou loja de equipe)
+        const storeDocRef = doc(db, ensureMerchantPath());
+        await trackWrite(fsSetDoc(storeDocRef, dotNotationUpdate, { merge: true }));
         console.log("[useStoreConfig] Config saved to Firestore");
 
       } catch (err: any) {

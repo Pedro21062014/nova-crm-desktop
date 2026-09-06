@@ -87,6 +87,45 @@ export function getMerchantId(): string | null {
   return _merchantId;
 }
 
+// ── Active Store (multi-loja + lojas de equipe — compatível com o CRM web) ──
+//
+// Espelha o ActiveStoreContext do CRM base:
+// - main (loja legada): merchants/{uid}/{subcollection}
+// - sub-loja:           merchants/{uid}/stores/{storeId}/{subcollection}
+// - loja de equipe:     merchants/{ownerUid}/{subcollection} (o dono é outro user)
+
+export const MAIN_STORE_ID = "main";
+
+let _activeStoreId: string = MAIN_STORE_ID;
+let _activeTeamMerchantId: string | null = null;
+let _storeVersion = 0;
+const _storeListeners = new Set<() => void>();
+
+export function setActiveStore(storeId: string, teamMerchantId: string | null) {
+  const changed = _activeStoreId !== storeId || _activeTeamMerchantId !== teamMerchantId;
+  _activeStoreId = storeId || MAIN_STORE_ID;
+  _activeTeamMerchantId = teamMerchantId;
+  if (changed) {
+    _storeVersion++;
+    _storeListeners.forEach((cb) => {
+      try { cb(); } catch (e) { console.warn("[Store] listener error:", e); }
+    });
+  }
+}
+
+export function getActiveStore(): { storeId: string; teamMerchantId: string | null } {
+  return { storeId: _activeStoreId, teamMerchantId: _activeTeamMerchantId };
+}
+
+export function getStoreVersion(): number {
+  return _storeVersion;
+}
+
+export function onStoreChange(cb: () => void): () => void {
+  _storeListeners.add(cb);
+  return () => { _storeListeners.delete(cb); };
+}
+
 function merchantPath(): string {
   if (!_merchantId) {
     const currentUser = auth.currentUser;
@@ -99,15 +138,34 @@ function merchantPath(): string {
   return `merchants/${_merchantId}`;
 }
 
-// Ensure merchantPath is available - fallback to auth.currentUser
-function ensureMerchantPath(): string {
+// Path da loja ATIVA (doc do merchant/sub-loja e pai das subcollections).
+// - loja de equipe: merchants/{ownerUid}
+// - sub-loja:       merchants/{uid}/stores/{storeId}
+// - main:           merchants/{uid}
+function storeAwareMerchantPath(): string {
+  const base = merchantPath();
+  if (_activeTeamMerchantId && _activeTeamMerchantId !== base.split("/")[1]) {
+    return `merchants/${_activeTeamMerchantId}`;
+  }
+  if (_activeStoreId !== MAIN_STORE_ID) {
+    return `${base}/stores/${_activeStoreId}`;
+  }
+  return base;
+}
+
+// Ensure merchantPath is available - fallback to auth.currentUser.
+// Exportado p/ hooks que precisam do doc da loja ativa (ex: useStoreConfig).
+export function ensureMerchantPath(): string {
   try {
-    return merchantPath();
+    return storeAwareMerchantPath();
   } catch {
     const currentUser = auth.currentUser;
     if (currentUser) {
       _merchantId = currentUser.uid;
-      return `merchants/${_merchantId}`;
+      const base = `merchants/${_merchantId}`;
+      if (_activeTeamMerchantId) return `merchants/${_activeTeamMerchantId}`;
+      if (_activeStoreId !== MAIN_STORE_ID) return `${base}/stores/${_activeStoreId}`;
+      return base;
     }
     throw new Error("Usuário não autenticado. Faça login novamente.");
   }
@@ -287,15 +345,13 @@ export function subscribeDoc<T>(
 // ── Merchant Document Helpers ──
 
 export async function getMerchantData<T>(): Promise<T | null> {
-  if (!_merchantId) return null;
-  const docRef = doc(db, `merchants/${_merchantId}`);
+  const docRef = doc(db, ensureMerchantPath());
   const snapshot = await getDoc(docRef);
   return snapshot.exists() ? (snapshot.data() as T) : null;
 }
 
 export async function updateMerchantData<T>(data: Partial<T>): Promise<void> {
-  if (!_merchantId) throw new Error("Usuário não autenticado");
-  const docRef = doc(db, `merchants/${_merchantId}`);
+  const docRef = doc(db, ensureMerchantPath());
   try {
     // Use set with merge to create or update
     await setDoc(docRef, {
@@ -316,13 +372,14 @@ export function subscribeMerchant<T>(
   callback: (data: T | null) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  if (!_merchantId) {
+  let docRef: any;
+  try {
+    docRef = doc(db, ensureMerchantPath());
+  } catch (err) {
     console.warn("[Firestore] Cannot subscribe to merchant: no merchant ID");
-    if (onError) onError(new Error("Usuário não autenticado"));
+    if (onError) onError(err as Error);
     return () => {};
   }
-
-  const docRef = doc(db, `merchants/${_merchantId}`);
 
   return onSnapshot(
     docRef,
@@ -342,8 +399,7 @@ export function subscribeMerchant<T>(
 
 // ── Detect if merchant document exists ──
 export async function merchantExists(): Promise<boolean> {
-  if (!_merchantId) return false;
-  const docRef = doc(db, `merchants/${_merchantId}`);
+  const docRef = doc(db, ensureMerchantPath());
   const snapshot = await getDoc(docRef);
   return snapshot.exists();
 }
@@ -728,9 +784,8 @@ export function toMs(ts: Timestamp | number | undefined): number {
 
 // Get merchant data from RTDB (fallback for Firestore)
 export async function getMerchantDataRTDB<T>(): Promise<T | null> {
-  if (!_merchantId) return null;
   try {
-    const merchantRef = rtdbRef(rtdb, `merchants/${_merchantId}`);
+    const merchantRef = rtdbRef(rtdb, ensureMerchantPath());
     const snapshot = await rtdbGet(merchantRef);
     if (snapshot.exists()) {
       console.log("[RTDB] Got merchant data:", snapshot.val());
@@ -755,7 +810,7 @@ export function subscribeMerchantRTDB<T>(
     return () => {};
   }
 
-  const merchantRef = rtdbRef(rtdb, `merchants/${_merchantId}`);
+  const merchantRef = rtdbRef(rtdb, ensureMerchantPath());
 
   const unsubscribe = onValue(
     merchantRef,
@@ -777,9 +832,8 @@ export function subscribeMerchantRTDB<T>(
 
 // Update merchant data in RTDB
 export async function updateMerchantDataRTDB<T>(data: Partial<T>): Promise<void> {
-  if (!_merchantId) throw new Error("Usuário não autenticado");
   try {
-    const merchantRef = rtdbRef(rtdb, `merchants/${_merchantId}`);
+    const merchantRef = rtdbRef(rtdb, ensureMerchantPath());
     await rtdbUpdate(merchantRef, {
       ...data,
       updatedAt: Date.now(),
@@ -888,7 +942,7 @@ export function subscribeChatsRTDB(
     return () => {};
   }
 
-  const chatsRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats`);
+  const chatsRef = rtdbRef(rtdb, `${ensureMerchantPath()}/chats`);
 
   return onValue(
     chatsRef,
@@ -917,7 +971,7 @@ export function subscribeChatMessages(
     return () => {};
   }
 
-  const messagesRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}/messages`);
+  const messagesRef = rtdbRef(rtdb, `${ensureMerchantPath()}/chats/${chatId}/messages`);
 
   return onValue(
     messagesRef,
@@ -942,7 +996,7 @@ export async function sendChatMessage(
 ): Promise<string> {
   if (!_merchantId) throw new Error("Usuário não autenticado");
   try {
-    const messagesRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}/messages`);
+    const messagesRef = rtdbRef(rtdb, `${ensureMerchantPath()}/chats/${chatId}/messages`);
     const newMsgRef = rtdbPush(messagesRef);
     const sender = message.sender || message.senderRole || "merchant";
 
@@ -977,7 +1031,7 @@ export async function sendChatMessage(
     } catch (fsErr: any) {
       // Firestore update failed, try RTDB update
       console.warn("[Chat] Firestore update failed, trying RTDB:", fsErr);
-      const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
+      const chatRef = rtdbRef(rtdb, `${ensureMerchantPath()}/chats/${chatId}`);
       await rtdbUpdate(chatRef, {
         lastMessage: lastMsgText,
         lastMessageSender: sender,
@@ -1018,7 +1072,7 @@ export async function createChatConversation(
     // Firestore failed, try RTDB as fallback
     console.warn("[Chat] Firestore create failed, trying RTDB:", fsErr);
     try {
-      const chatsRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats`);
+      const chatsRef = rtdbRef(rtdb, `${ensureMerchantPath()}/chats`);
       const newChatRef = rtdbPush(chatsRef);
       await rtdbSet(newChatRef, {
         ...conversation,
@@ -1043,7 +1097,7 @@ export async function markChatAsRead(chatId: string): Promise<void> {
     await updateDoc(chatDocRef, { unreadCount: 0 } as Record<string, unknown>);
   } catch {
     try {
-      const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
+      const chatRef = rtdbRef(rtdb, `${ensureMerchantPath()}/chats/${chatId}`);
       await rtdbUpdate(chatRef, { unreadCount: 0 } as Record<string, unknown>);
     } catch (err: any) {
       console.error("[Chat] Error marking chat as read:", err);
@@ -1063,7 +1117,7 @@ export async function deleteChatConversation(chatId: string): Promise<void> {
   }
   try {
     // Also delete RTDB messages
-    const chatRef = rtdbRef(rtdb, `merchants/${_merchantId}/chats/${chatId}`);
+    const chatRef = rtdbRef(rtdb, `${ensureMerchantPath()}/chats/${chatId}`);
     await rtdbRemove(chatRef);
   } catch (rtdbErr) {
     console.warn("[Chat] RTDB delete failed:", rtdbErr);
