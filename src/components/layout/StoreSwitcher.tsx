@@ -415,7 +415,7 @@ export function StoreSwitcher({ collapsed }: Props) {
                 animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{ opacity: 0, x: -10, scale: 0.98 }}
                 transition={{ duration: 0.12 }}
-                className="fixed top-24 left-20 w-72 bg-popover text-popover-foreground rounded-2xl shadow-2xl border border-border overflow-hidden z-50"
+                className="fixed top-24 left-20 w-72 bg-card text-card-foreground rounded-2xl shadow-2xl border border-border overflow-hidden z-50"
               >
                 {dropdownContent}
               </motion.div>
@@ -473,7 +473,7 @@ export function StoreSwitcher({ collapsed }: Props) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.98 }}
               transition={{ duration: 0.12 }}
-              className="absolute left-3 right-3 top-full mt-1.5 bg-popover text-popover-foreground rounded-2xl shadow-xl border border-border overflow-hidden z-50 max-h-[70vh] overflow-y-auto"
+              className="absolute left-3 right-3 top-full mt-1.5 bg-card text-card-foreground rounded-2xl shadow-xl border border-border overflow-hidden z-50 max-h-[70vh] overflow-y-auto"
             >
               {dropdownContent}
             </motion.div>

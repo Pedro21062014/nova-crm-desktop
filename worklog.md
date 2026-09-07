@@ -350,3 +350,14 @@ Work Log:
 
 Stage Summary:
 - v2.12.0: seletor de loja (multi-loja + lojas de equipe) e aba Equipe completa (convites, permissoes por modulo, presenca realtime, convites recebidos)
+
+## v2.12.1 — Correção do fundo transparente no seletor de loja
+
+Task: corrigir seletor de lojas transparente
+Work Log:
+- Diagnostico: o StoreSwitcher usava bg-popover/text-popover-foreground no dropdown (expanded e collapsed) — o token --color-popover NAO existe no index.css (tema do app so tem background/card/muted/accent/sidebar...) -> fundo transparente
+- Corrigi p/ bg-card text-card-foreground (mesmo token que o Modal usa; --color-card = #ffffff)
+- Obs: node_modules nao persiste entre sessoes (excluido do snapshot) — npm install de novo; build validado (tsc -b + vite build OK), versao 2.12.0 -> 2.12.1
+
+Stage Summary:
+- v2.12.1: dropdown do seletor de loja com fundo solid (bg-card)

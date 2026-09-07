@@ -4,6 +4,11 @@ Todas as mudanças relevantes do aplicativo, em linguagem amigável.
 Este arquivo é a fonte das "novidades da versão" exibidas no app (Configurações)
 e nas release notes do GitHub. A seção da versão atual é usada como body da release.
 
+## [2.12.1] — 2026-09-03
+
+### 🔧 Correções
+- **Seletor de Loja: dropdown com fundo transparente corrigido** — o menu de troca de loja usava uma cor que não existe no tema; agora tem fundo sólido igual aos demais painéis do app
+
 ## [2.12.0] — 2026-09-03
 
 ### 🆕 Seletor de Loja (multi-loja)
