@@ -62,7 +62,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "build/**/*"
+      "icons/**/*"
     ],
     "extraResources": [],
     "publish": {
@@ -80,16 +80,16 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "icons/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
+      "installerIcon": "icons/icon.ico",
+      "uninstallerIcon": "icons/icon.ico",
+      "installerHeaderIcon": "icons/icon.ico",
       "installerLanguages": [
         "pt_BR",
         "en_US"
@@ -127,7 +127,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "icons/icon.png",
       "category": "Office",
       "maintainer": "Nova CRM Team"
     },
@@ -152,7 +152,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "icons/icon.png",
       "category": "public.app-category.business",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
